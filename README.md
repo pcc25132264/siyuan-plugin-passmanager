@@ -13,10 +13,11 @@ The idea for this plugin originated from a real-world security concern: Siyuan N
 - **Advanced Security**: Utilizes AES-256-GCM encryption with PBKDF2 key derivation for maximum security.
 - **Dual Management System**: Seamlessly switch between managing Passwords and Encrypted Texts using a tabbed interface.
 - **Category Management**: Group-based data storage for better organization, including customizable and default categories (Work, Finance, Social, Life, etc.).
-- **User-Friendly Interface**: Intuitive design with quick-copy buttons, search functionality, and sortable columns.
+- **User-Friendly Interface**: Intuitive design with quick-copy buttons, show/hide password toggles, search functionality, and sortable columns.
 - **Intelligent Auto-Lock**: Automatically locks on idle or window blur to prevent unauthorized access.
 - **Random Password Generator**: Create strong, unique passwords with customizable parameters when adding entries.
 - **Import & Export**: Support exporting data to JSON for backup, and exporting to regular or encrypted Markdown notes directly into your Siyuan workspace.
+- **Transparent Decryption**: View your unique encryption Salt and Node.js manual decryption examples directly in the plugin settings to guarantee future access to your data.
 - **Master Password Recovery**: Optional feature to use your Siyuan login password as a fallback to recover your master password.
 - **Cross-Platform Compatibility**: Works seamlessly across all Siyuan Note supported platforms (Desktop and Mobile UI adaptations).
 
@@ -63,6 +64,7 @@ The idea for this plugin originated from a real-world security concern: Siyuan N
 - Access plugin settings via Siyuan's standard plugin settings menu.
 - You can toggle "Always Require Unlock". If disabled, the vault will save your master password locally (less secure) to auto-unlock.
 - You can change your master password from the settings menu.
+- **Manual Decryption Settings**: In the plugin settings, you can view the encryption algorithm details, your unique Salt, and a Node.js script example that shows how to manually decrypt your `vault-data.json` if you ever need to access your data outside the plugin.
 
 ## Security Notes
 
