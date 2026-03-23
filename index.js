@@ -298,10 +298,41 @@
 
                     const algoText = this.i18n.algoName || 'Algorithm';
                     const saltText = this.i18n.saltValue || 'Salt';
+                    const exampleText = this.i18n.decryptionExample || 'Node.js Decryption Example:';
                     
                     div.innerHTML = `
-                        <div><strong>${algoText}:</strong> AES-256-GCM / PBKDF2</div>
-                        <div><strong>${saltText}:</strong> ${this.salt ? this.salt.substring(0, 32) + '...' : 'Not Initialized'}</div>
+                        <div><strong>${algoText}:</strong> AES-256-GCM / PBKDF2 (100000 iterations, SHA-256)</div>
+                        <div><strong>${saltText}:</strong> <span style="user-select: all; font-family: monospace;">${this.salt ? this.salt : 'Not Initialized'}</span></div>
+                        <div style="margin-top: 8px; text-align: left; background: var(--b3-theme-surface-lighter); padding: 8px; border-radius: 4px; max-width: 500px; overflow-x: auto;">
+                            <strong>${exampleText}</strong>
+                            <pre style="margin: 4px 0 0 0; white-space: pre-wrap; font-family: monospace; font-size: 11px;">
+const crypto = require('crypto');
+const fs = require('fs');
+
+const password = 'your-master-password';
+const saltHex = '${this.salt || 'YOUR_SALT_HEX'}';
+const salt = Buffer.from(saltHex, 'hex');
+
+// Read vault-data.json
+const vaultJson = JSON.parse(fs.readFileSync('vault-data.json', 'utf8'));
+const iv = Buffer.from(vaultJson.iv, 'hex');
+const encryptedData = Buffer.from(vaultJson.data, 'hex');
+
+// PBKDF2 Key Derivation
+const key = crypto.pbkdf2Sync(password, salt, 100000, 32, 'sha256');
+
+// AES-256-GCM Decryption
+const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv);
+const authTag = encryptedData.subarray(encryptedData.length - 16);
+const data = encryptedData.subarray(0, encryptedData.length - 16);
+decipher.setAuthTag(authTag);
+
+let decrypted = decipher.update(data, null, 'utf8');
+decrypted += decipher.final('utf8');
+
+console.log(JSON.parse(decrypted));
+                            </pre>
+                        </div>
                     `;
                     return div;
                 }
@@ -876,8 +907,11 @@
                         </div>
                     </td>
                     <td>
-                        <div class="pm-td-content pm-td-with-copy">
-                            <span class="pm-text-ellipsis">********</span>
+                        <div class="pm-td-content pm-td-with-copy" style="position: relative; display: flex; align-items: center;">
+                            <span class="pm-text-ellipsis pm-secret-text" data-secret="${(entry.password || '').replace(/"/g, '&quot;')}">********</span>
+                            <button class="b3-button b3-button--text b3-button--small pm-toggle-secret-btn" title="${this.i18n.showPassword || 'Show'}">
+                                <svg class="b3-button__icon"><use xlink:href="#iconEyeoff"></use></svg>
+                            </button>
                             ${createCopyBtn(entry.password, this.i18n.password)}
                         </div>
                     </td>
@@ -900,6 +934,24 @@
                     </td>
                 `;
                 
+                // Add toggle secret event listeners
+                tr.querySelectorAll('.pm-toggle-secret-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const span = btn.previousElementSibling;
+                        const iconUse = btn.querySelector('use');
+                        const isHidden = span.textContent === '********';
+                        
+                        if (isHidden) {
+                            span.textContent = span.getAttribute('data-secret') || '';
+                            iconUse.setAttribute('xlink:href', '#iconEye');
+                        } else {
+                            span.textContent = '********';
+                            iconUse.setAttribute('xlink:href', '#iconEyeoff');
+                        }
+                    });
+                });
+
                 // Add copy event listeners
                 tr.querySelectorAll('.pm-copy-btn').forEach(btn => {
                     btn.addEventListener('click', (e) => {
@@ -959,8 +1011,11 @@
                     <td><div class="pm-td-content"><span class="pm-category-text">${catName}</span></div></td>
                     <td><div class="pm-td-content" title="${entry.title || ''}">${entry.title || 'Untitled'}</div></td>
                     <td>
-                        <div class="pm-td-content pm-td-with-copy">
-                            <span class="pm-text-ellipsis">********</span>
+                        <div class="pm-td-content pm-td-with-copy" style="position: relative; display: flex; align-items: center;">
+                            <span class="pm-text-ellipsis pm-secret-text" data-secret="${(entry.encryptedTextContent || entry.text || '').replace(/"/g, '&quot;')}">********</span>
+                            <button class="b3-button b3-button--text b3-button--small pm-toggle-secret-btn" title="${this.i18n.showPassword || 'Show'}">
+                                <svg class="b3-button__icon"><use xlink:href="#iconEyeoff"></use></svg>
+                            </button>
                             ${createCopyBtn(entry.encryptedTextContent || entry.text, this.i18n.encryptedTextContent || 'Encrypted Text Content')}
                         </div>
                     </td>
@@ -977,6 +1032,24 @@
                     </td>
                 `;
                 
+                // Add toggle secret event listeners
+                tr.querySelectorAll('.pm-toggle-secret-btn').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const span = btn.previousElementSibling;
+                        const iconUse = btn.querySelector('use');
+                        const isHidden = span.textContent === '********';
+                        
+                        if (isHidden) {
+                            span.textContent = span.getAttribute('data-secret') || '';
+                            iconUse.setAttribute('xlink:href', '#iconEye');
+                        } else {
+                            span.textContent = '********';
+                            iconUse.setAttribute('xlink:href', '#iconEyeoff');
+                        }
+                    });
+                });
+
                 tr.querySelectorAll('.pm-copy-btn').forEach(btn => {
                     btn.addEventListener('click', (e) => {
                         e.stopPropagation();
@@ -1028,8 +1101,13 @@
                         <input type="text" class="passmanager-input b3-text-field" id="pm-entry-title" placeholder="${this.i18n.title}" value="${entry?.title || ''}">
                         <input type="text" class="passmanager-input b3-text-field" id="pm-entry-username" placeholder="${this.i18n.username}" value="${entry?.username || ''}">
                         
-                        <div style="display: flex; gap: 8px;">
-                            <input type="password" class="passmanager-input b3-text-field" id="pm-entry-password" placeholder="${this.i18n.password}" value="${entry?.password || ''}">
+                        <div style="display: flex; gap: 8px; align-items: center;">
+                            <div style="position: relative; flex: 1; display: flex; align-items: center;">
+                                <input type="password" class="passmanager-input b3-text-field" style="width: 100%; padding-right: 32px;" id="pm-entry-password" placeholder="${this.i18n.password}" value="${entry?.password || ''}">
+                                <button class="b3-button b3-button--text pm-dialog-toggle-pwd" style="position: absolute; right: 4px; padding: 4px;" title="${this.i18n.showPassword || 'Show Password'}">
+                                    <svg class="b3-button__icon"><use xlink:href="#iconEyeoff"></use></svg>
+                                </button>
+                            </div>
                             <button class="b3-button b3-button--outline" id="pm-gen-btn">${this.i18n.generatePassword}</button>
                         </div>
                         
@@ -1063,7 +1141,25 @@
                 const pwdInput = dialog.element.querySelector('#pm-entry-password');
                 pwdInput.value = pwd;
                 pwdInput.type = 'text'; // show generated password temporarily
+                
+                const iconUse = dialog.element.querySelector('.pm-dialog-toggle-pwd use');
+                if (iconUse) iconUse.setAttribute('xlink:href', '#iconEye');
             });
+
+            const togglePwdBtn = dialog.element.querySelector('.pm-dialog-toggle-pwd');
+            if (togglePwdBtn) {
+                togglePwdBtn.addEventListener('click', () => {
+                    const pwdInput = dialog.element.querySelector('#pm-entry-password');
+                    const iconUse = togglePwdBtn.querySelector('use');
+                    if (pwdInput.type === 'password') {
+                        pwdInput.type = 'text';
+                        iconUse.setAttribute('xlink:href', '#iconEye');
+                    } else {
+                        pwdInput.type = 'password';
+                        iconUse.setAttribute('xlink:href', '#iconEyeoff');
+                    }
+                });
+            }
 
             dialog.element.querySelector('#pm-cancel-btn').addEventListener('click', () => {
                 dialog.destroy();
