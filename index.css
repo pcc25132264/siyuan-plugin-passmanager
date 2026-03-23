@@ -1,0 +1,266 @@
+.passmanager-container {
+    padding: 16px;
+    height: 100%;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+}
+
+.passmanager-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.passmanager-search {
+    flex-grow: 1;
+    padding: 8px;
+    border: 1px solid var(--b3-theme-surface-lighter);
+    border-radius: 4px;
+    background: var(--b3-theme-background);
+    color: var(--b3-theme-on-background);
+    min-width: 150px;
+}
+
+.passmanager-toolbar {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.passmanager-list {
+    flex-grow: 1;
+    overflow-y: auto;
+    overflow-x: auto;
+    border: 1px solid var(--b3-theme-surface-lighter);
+    border-radius: 4px;
+    background: var(--b3-theme-background);
+}
+
+.passmanager-table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 500px;
+}
+
+.passmanager-table th, .passmanager-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--b3-theme-surface-lighter);
+    text-align: left;
+    color: var(--b3-theme-on-background);
+}
+
+.passmanager-table th {
+    font-weight: bold;
+    color: var(--b3-theme-on-surface);
+    background: var(--b3-theme-surface);
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    white-space: nowrap;
+}
+
+.passmanager-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--b3-theme-surface-lighter);
+    text-align: left;
+    color: var(--b3-theme-on-background);
+    vertical-align: middle;
+}
+
+.passmanager-table tbody tr {
+    transition: background-color 0.2s;
+    cursor: pointer;
+}
+
+.passmanager-table tbody tr:hover {
+    background-color: var(--b3-theme-surface);
+}
+
+.pm-td-content {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.pm-td-with-copy {
+    justify-content: space-between;
+}
+
+.pm-copy-btn {
+    opacity: 0;
+    transition: opacity 0.2s;
+    padding: 2px !important;
+    height: 20px !important;
+    min-width: 20px !important;
+}
+
+.passmanager-table tr:hover .pm-copy-btn {
+    opacity: 1;
+}
+
+.pm-text-ellipsis {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 150px;
+    display: inline-block;
+}
+
+.pm-notes-ellipsis {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 300px;
+    display: inline-block;
+}
+
+.pm-category-text {
+    display: inline-block;
+    font-size: 13px;
+    color: var(--b3-theme-on-surface-light);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 120px;
+}
+
+.pm-date {
+    font-size: 12px;
+    color: var(--b3-theme-on-surface-light);
+    white-space: nowrap;
+}
+
+.pm-url-link {
+    color: var(--b3-theme-primary);
+    text-decoration: none;
+}
+.pm-url-link:hover {
+    text-decoration: underline;
+}
+
+.passmanager-select {
+    padding: 4px 8px;
+    border: 1px solid var(--b3-theme-surface-lighter);
+    border-radius: 4px;
+    background: var(--b3-theme-background);
+    color: var(--b3-theme-on-background);
+    height: 32px;
+    box-sizing: border-box;
+}
+
+.passmanager-item-actions {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+/* 移动端特定适配 */
+@media (max-width: 768px) {
+    .passmanager-container {
+        padding: 8px;
+    }
+    
+    .passmanager-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .passmanager-toolbar {
+        justify-content: space-between;
+    }
+    
+    .passmanager-table th, .passmanager-table td {
+        padding: 8px 4px;
+        font-size: 14px;
+    }
+    
+    .passmanager-dialog-form {
+        padding: 8px !important;
+    }
+}
+
+.passmanager-dialog-form {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.passmanager-input {
+    padding: 4px 8px;
+    border: 1px solid var(--b3-theme-surface-lighter);
+    border-radius: 4px;
+    background: var(--b3-theme-background);
+    color: var(--b3-theme-on-background);
+    width: 100%;
+    box-sizing: border-box;
+}
+
+textarea.passmanager-input {
+    min-height: 80px;
+    resize: vertical;
+}
+
+.passmanager-btn {
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    background: var(--b3-theme-primary);
+    color: var(--b3-theme-on-primary);
+}
+
+.passmanager-btn-secondary {
+    background: var(--b3-theme-surface-lighter);
+    color: var(--b3-theme-on-surface);
+}
+
+.passmanager-lock-screen {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: var(--b3-theme-background);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.passmanager-generator {
+    margin-top: 12px;
+    padding: 12px;
+    background: var(--b3-theme-surface);
+    border-radius: 4px;
+}
+
+.passmanager-generator-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.pm-cat-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 12px;
+    max-height: 300px;
+    overflow-y: auto;
+}
+
+.pm-cat-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px;
+    background: var(--b3-theme-surface);
+    border-radius: 4px;
+}

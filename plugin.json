@@ -1,0 +1,31 @@
+{
+  "name": "siyuan-plugin-passmanager",
+  "author": "Xingxing",
+  "url": "https://github.com/siyuan-note/siyuan-plugin-passmanager",
+  "version": "1.0.0",
+  "minAppVersion": "3.0.0",
+  "backends": ["windows", "linux", "darwin", "docker", "ios", "android"],
+  "frontends": ["desktop", "desktop-window", "mobile", "browser", "browser-desktop", "browser-mobile"],
+  "displayName": {
+    "default": "Password Manager",
+    "zh_CN": "密码管理器",
+    "en_US": "Password Manager"
+  },
+  "description": {
+    "default": "Professional grade password manager plugin for Siyuan Note",
+    "zh_CN": "思源笔记专业级密码管理插件，提供安全的AES-256加密存储与管理功能",
+    "en_US": "Professional grade password manager plugin for Siyuan Note with AES-256 encrypted storage"
+  },
+  "readme": {
+    "default": "README.md",
+    "zh_CN": "README_zh_CN.md"
+  },
+  "funding": {
+    "openCollective": "",
+    "patreon": "",
+    "github": ""
+  },
+  "keywords": ["password", "security", "passmanager", "crypto"],
+  "icon": "iconLock",
+  "css": "index.css"
+}
