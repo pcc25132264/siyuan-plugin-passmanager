@@ -219,6 +219,18 @@
                 }
             });
 
+            const plugin = this;
+            this.addTab({
+                type: 'passmanager-tab',
+                init() {
+                    plugin.tabElement = this.element;
+                    plugin.renderTabContent();
+                },
+                destroy() {
+                    plugin.tabElement = null;
+                }
+            });
+
             // Load config
             const pluginConfig = await this.loadData('plugin-config.json');
             if (pluginConfig) {
@@ -323,16 +335,31 @@
                     try {
                         await this.crypto.deriveKey(this.pluginConfig.savedPassword, this.salt);
                         await this.loadVault();
-                        this.showMainDialog();
+                        this.openMainTab();
                     } catch (e) {
                         siyuan.showMessage(this.i18n.unlockFailed, 3000, 'error');
-                        this.showUnlockDialog();
+                        this.openMainTab();
                     }
                 } else {
-                    this.showUnlockDialog();
+                    this.openMainTab();
                 }
             } else {
-                this.showMainDialog();
+                this.openMainTab();
+            }
+        }
+
+        openMainTab() {
+            siyuan.openTab({
+                app: this.app,
+                custom: {
+                    icon: "iconLock",
+                    title: this.i18n.pluginName || "PassManager",
+                    id: this.name + "passmanager-tab"
+                }
+            });
+            // If the tab is already open, it will just focus it. We should ensure it's rendered correctly.
+            if (this.tabElement) {
+                this.renderTabContent();
             }
         }
 
@@ -340,9 +367,8 @@
             this.crypto.lock();
             this.locked = true;
             this.vaultData = { entries: [], categories: [] };
-            if (this.mainDialog) {
-                this.mainDialog.destroy();
-                this.mainDialog = null;
+            if (this.tabElement) {
+                this.renderTabContent();
             }
         }
 
@@ -500,31 +526,42 @@
             }
         }
 
-        showUnlockDialog() {
+        renderTabContent() {
+            if (!this.tabElement) return;
+            
+            if (this.locked) {
+                this.renderUnlockUI();
+            } else {
+                this.renderMainUI();
+            }
+        }
+
+        renderUnlockUI() {
             const isSetup = !this.salt;
-            const dialog = new siyuan.Dialog({
-                title: isSetup ? this.i18n.setupMasterPassword : this.i18n.unlockTitle,
-                content: `
-                    <div class="passmanager-dialog-form" style="padding: 16px;">
-                        <input type="password" class="passmanager-input b3-text-field" id="pm-master-pwd" placeholder="${this.i18n.masterPassword}">
-                        ${isSetup ? `
-                            <input type="password" class="passmanager-input b3-text-field" id="pm-master-pwd-confirm" placeholder="${this.i18n.confirmPassword}">
-                            <input type="password" class="passmanager-input b3-text-field" id="pm-siyuan-pwd" placeholder="${this.i18n.siyuanLoginPassword || 'Siyuan Password'}" title="${this.i18n.recoveryInputDesc}">
-                            <div style="font-size: 12px; color: var(--b3-theme-on-surface-light);">${this.i18n.recoveryInputDesc || 'Optional: Used to recover master password'}</div>
-                        ` : ''}
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 16px;">
-                            <div>
-                                ${!isSetup ? `<a href="javascript:void(0)" id="pm-forgot-pwd" style="color: var(--b3-theme-primary); font-size: 12px;">${this.i18n.forgotPassword || 'Forgot Password?'}</a>` : ''}
+            this.tabElement.innerHTML = `
+                <div class="passmanager-tab-container" style="display: flex; justify-content: center; align-items: center; height: 100%; width: 100%; background: var(--b3-theme-background);">
+                    <div style="width: 400px; padding: 24px; border: 1px solid var(--b3-theme-surface-lighter); border-radius: 8px; background: var(--b3-theme-surface);">
+                        <h3 style="margin-top: 0; text-align: center;">${isSetup ? this.i18n.setupMasterPassword : this.i18n.unlockTitle}</h3>
+                        <div class="passmanager-dialog-form" style="margin-top: 16px;">
+                            <input type="password" class="passmanager-input b3-text-field" id="pm-master-pwd" placeholder="${this.i18n.masterPassword}">
+                            ${isSetup ? `
+                                <input type="password" class="passmanager-input b3-text-field" id="pm-master-pwd-confirm" placeholder="${this.i18n.confirmPassword}">
+                                <input type="password" class="passmanager-input b3-text-field" id="pm-siyuan-pwd" placeholder="${this.i18n.siyuanLoginPassword || 'Siyuan Password'}" title="${this.i18n.recoveryInputDesc}">
+                                <div style="font-size: 12px; color: var(--b3-theme-on-surface-light);">${this.i18n.recoveryInputDesc || 'Optional: Used to recover master password'}</div>
+                            ` : ''}
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 24px;">
+                                <div>
+                                    ${!isSetup ? `<a href="javascript:void(0)" id="pm-forgot-pwd" style="color: var(--b3-theme-primary); font-size: 12px;">${this.i18n.forgotPassword || 'Forgot Password?'}</a>` : ''}
+                                </div>
+                                <button class="passmanager-btn b3-button" id="pm-unlock-btn">${isSetup ? this.i18n.createVault : this.i18n.unlock}</button>
                             </div>
-                            <button class="passmanager-btn b3-button" id="pm-unlock-btn">${isSetup ? this.i18n.createVault : this.i18n.unlock}</button>
                         </div>
                     </div>
-                `,
-                width: '400px'
-            });
+                </div>
+            `;
 
             if (!isSetup) {
-                dialog.element.querySelector('#pm-forgot-pwd').addEventListener('click', () => {
+                this.tabElement.querySelector('#pm-forgot-pwd').addEventListener('click', () => {
                     const promptDialog = new siyuan.Dialog({
                         title: this.i18n.siyuanLoginPassword || 'Enter Siyuan Login Password',
                         content: `
@@ -546,7 +583,7 @@
                             try {
                                 const masterPwd = await this.crypto.decryptTextWithPassword(this.recoveryData, siyuanPwd, this.salt);
                                 siyuan.showMessage(`${this.i18n.recoverySuccess || 'Recovery success! Master password:'} ${masterPwd}`, 10000);
-                                dialog.element.querySelector('#pm-master-pwd').value = masterPwd;
+                                this.tabElement.querySelector('#pm-master-pwd').value = masterPwd;
                             } catch (e) {
                                 siyuan.showMessage(this.i18n.recoveryFailed || 'Recovery failed', 3000, 'error');
                             }
@@ -559,14 +596,14 @@
                 });
             }
 
-            const btn = dialog.element.querySelector('#pm-unlock-btn');
+            const btn = this.tabElement.querySelector('#pm-unlock-btn');
             btn.addEventListener('click', async () => {
-                const pwd = dialog.element.querySelector('#pm-master-pwd').value;
+                const pwd = this.tabElement.querySelector('#pm-master-pwd').value;
                 if (!pwd) return;
                 
                 if (isSetup) {
-                    const confirmPwd = dialog.element.querySelector('#pm-master-pwd-confirm').value;
-                    const siyuanPwd = dialog.element.querySelector('#pm-siyuan-pwd').value;
+                    const confirmPwd = this.tabElement.querySelector('#pm-master-pwd-confirm').value;
+                    const siyuanPwd = this.tabElement.querySelector('#pm-siyuan-pwd').value;
                     if (pwd !== confirmPwd) {
                         siyuan.showMessage(this.i18n.passwordMismatch, 3000, 'error');
                         return;
@@ -605,8 +642,7 @@
                         encryptedTexts: [] 
                     };
                     await this.saveVault();
-                    dialog.destroy();
-                    this.showMainDialog();
+                    this.renderTabContent();
                 } else {
                     try {
                         await this.crypto.deriveKey(pwd, this.salt);
@@ -617,85 +653,82 @@
                             await this.saveData('plugin-config.json', this.pluginConfig);
                         }
                         
-                        dialog.destroy();
-                        this.showMainDialog();
+                        this.renderTabContent();
                     } catch (e) {
                         siyuan.showMessage(e.message, 3000, 'error');
                     }
                 }
             });
+            
+            // Add enter key listener for password input
+            this.tabElement.querySelector('#pm-master-pwd').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    btn.click();
+                }
+            });
         }
 
-        showMainDialog() {
-            if (this.mainDialog) {
-                this.mainDialog.destroy();
-            }
-            
+        renderMainUI() {
             const categoryOptions = `<option value="">${this.i18n.allCategories || 'All Categories'}</option>` + 
                 this.vaultData.categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
 
-            this.mainDialog = new siyuan.Dialog({
-                title: this.i18n.pluginName,
-                content: `
-                    <div class="passmanager-container">
-                        <div class="passmanager-header">
-                            <div class="passmanager-tabs" style="display: flex; gap: 8px; margin-right: auto;">
-                                <button class="b3-button pm-tab-btn" data-tab="passwords">${this.i18n.passwordsTab || 'Passwords'}</button>
-                                <button class="b3-button b3-button--outline pm-tab-btn" data-tab="texts">${this.i18n.encryptedTextsTab || 'Encrypted Texts'}</button>
-                            </div>
-                            <select id="pm-filter-category" class="passmanager-select b3-select">
-                                ${categoryOptions}
-                            </select>
-                            <input type="text" class="passmanager-search b3-text-field" id="pm-search" placeholder="${this.i18n.searchPlaceholder}">
-                            <div class="passmanager-toolbar">
-                                <button class="passmanager-btn-secondary b3-button b3-button--outline" id="pm-export-json-btn">${this.i18n.exportJson || 'Export JSON'}</button>
-                                <button class="passmanager-btn-secondary b3-button b3-button--outline" id="pm-export-note-unencrypted-btn">${this.i18n.exportUnencryptedNote || 'Export Unencrypted Note'}</button>
-                                <button class="passmanager-btn-secondary b3-button b3-button--outline" id="pm-export-note-encrypted-btn">${this.i18n.exportEncryptedNote || 'Export Encrypted Note'}</button>
-                                <button class="passmanager-btn-secondary b3-button b3-button--outline" id="pm-cat-btn">${this.i18n.manageCategories || 'Manage Categories'}</button>
-                                <button class="passmanager-btn b3-button" id="pm-add-btn">${this.i18n.addEntry}</button>
-                                <button class="passmanager-btn-secondary b3-button b3-button--cancel" id="pm-lock-btn">${this.i18n.lock}</button>
-                            </div>
+            this.tabElement.innerHTML = `
+                <div class="passmanager-container" style="height: 100%; display: flex; flex-direction: column;">
+                    <div class="passmanager-header" style="padding: 16px; border-bottom: 1px solid var(--b3-theme-surface-lighter); background: var(--b3-theme-background);">
+                        <div class="passmanager-tabs" style="display: flex; gap: 8px; margin-right: auto;">
+                            <button class="b3-button pm-tab-btn" data-tab="passwords">${this.i18n.passwordsTab || 'Passwords'}</button>
+                            <button class="b3-button b3-button--outline pm-tab-btn" data-tab="texts">${this.i18n.encryptedTextsTab || 'Encrypted Texts'}</button>
                         </div>
-                        <div class="passmanager-list">
-                            <div class="passmanager-table-wrapper">
-                                <table class="passmanager-table" id="pm-table-passwords">
-                                    <thead>
-                                        <tr>
-                                            <th>${this.i18n.category || 'Category'}</th>
-                                            <th>${this.i18n.title}</th>
-                                            <th id="pm-sort-username" style="cursor: pointer; user-select: none;">
-                                                ${this.i18n.username} <span id="pm-sort-icon"></span>
-                                            </th>
-                                            <th>${this.i18n.password || 'Password'}</th>
-                                            <th>URL</th>
-                                            <th>${this.i18n.notes || 'Notes'}</th>
-                                            <th style="width: 120px;">${this.i18n.actions || 'Actions'}</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="pm-list"></tbody>
-                                </table>
-                                <table class="passmanager-table" id="pm-table-texts" style="display: none;">
-                                    <thead>
-                                        <tr>
-                                            <th>${this.i18n.category || 'Category'}</th>
-                                            <th>${this.i18n.title}</th>
-                                            <th>${this.i18n.encryptedTextContent || 'Encrypted Text Content'}</th>
-                                            <th>${this.i18n.notes || 'Notes'}</th>
-                                            <th style="width: 120px;">${this.i18n.actions || 'Actions'}</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="pm-texts-list"></tbody>
-                                </table>
-                            </div>
+                        <select id="pm-filter-category" class="passmanager-select b3-select">
+                            ${categoryOptions}
+                        </select>
+                        <input type="text" class="passmanager-search b3-text-field" id="pm-search" placeholder="${this.i18n.searchPlaceholder}">
+                        <div class="passmanager-toolbar">
+                            <button class="passmanager-btn-secondary b3-button b3-button--outline" id="pm-export-json-btn">${this.i18n.exportJson || 'Export JSON'}</button>
+                            <button class="passmanager-btn-secondary b3-button b3-button--outline" id="pm-export-note-unencrypted-btn">${this.i18n.exportUnencryptedNote || 'Export Unencrypted Note'}</button>
+                            <button class="passmanager-btn-secondary b3-button b3-button--outline" id="pm-export-note-encrypted-btn">${this.i18n.exportEncryptedNote || 'Export Encrypted Note'}</button>
+                            <button class="passmanager-btn-secondary b3-button b3-button--outline" id="pm-cat-btn">${this.i18n.manageCategories || 'Manage Categories'}</button>
+                            <button class="passmanager-btn b3-button" id="pm-add-btn">${this.i18n.addEntry}</button>
+                            <button class="passmanager-btn-secondary b3-button b3-button--cancel" id="pm-lock-btn">${this.i18n.lock}</button>
                         </div>
                     </div>
-                `,
-                width: this.isMobile ? '100vw' : '90vw',
-                height: this.isMobile ? '100vh' : '90vh'
-            });
+                    <div class="passmanager-list" style="flex: 1; overflow: auto; padding: 16px; background: var(--b3-theme-background);">
+                        <div class="passmanager-table-wrapper">
+                            <table class="passmanager-table" id="pm-table-passwords">
+                                <thead>
+                                    <tr>
+                                        <th>${this.i18n.category || 'Category'}</th>
+                                        <th>${this.i18n.title}</th>
+                                        <th id="pm-sort-username" style="cursor: pointer; user-select: none;">
+                                            ${this.i18n.username} <span id="pm-sort-icon"></span>
+                                        </th>
+                                        <th>${this.i18n.password || 'Password'}</th>
+                                        <th>URL</th>
+                                        <th>${this.i18n.notes || 'Notes'}</th>
+                                        <th style="width: 120px;">${this.i18n.actions || 'Actions'}</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="pm-list"></tbody>
+                            </table>
+                            <table class="passmanager-table" id="pm-table-texts" style="display: none;">
+                                <thead>
+                                    <tr>
+                                        <th>${this.i18n.category || 'Category'}</th>
+                                        <th>${this.i18n.title}</th>
+                                        <th>${this.i18n.encryptedTextContent || 'Encrypted Text Content'}</th>
+                                        <th>${this.i18n.notes || 'Notes'}</th>
+                                        <th style="width: 120px;">${this.i18n.actions || 'Actions'}</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="pm-texts-list"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            `;
 
             // Tabs
-            const tabBtns = this.mainDialog.element.querySelectorAll('.pm-tab-btn');
+            const tabBtns = this.tabElement.querySelectorAll('.pm-tab-btn');
             tabBtns.forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     const tab = e.target.getAttribute('data-tab');
@@ -709,11 +742,11 @@
                     });
                     
                     if (tab === 'passwords') {
-                        this.mainDialog.element.querySelector('#pm-table-passwords').style.display = 'table';
-                        this.mainDialog.element.querySelector('#pm-table-texts').style.display = 'none';
+                        this.tabElement.querySelector('#pm-table-passwords').style.display = 'table';
+                        this.tabElement.querySelector('#pm-table-texts').style.display = 'none';
                     } else {
-                        this.mainDialog.element.querySelector('#pm-table-passwords').style.display = 'none';
-                        this.mainDialog.element.querySelector('#pm-table-texts').style.display = 'table';
+                        this.tabElement.querySelector('#pm-table-passwords').style.display = 'none';
+                        this.tabElement.querySelector('#pm-table-texts').style.display = 'table';
                     }
                     
                     this.renderList();
@@ -722,21 +755,21 @@
 
             // Set initial tab state
             if (this.currentTab === 'texts') {
-                this.mainDialog.element.querySelector('[data-tab="texts"]').click();
+                this.tabElement.querySelector('[data-tab="texts"]').click();
             }
 
-            const searchInput = this.mainDialog.element.querySelector('#pm-search');
+            const searchInput = this.tabElement.querySelector('#pm-search');
             searchInput.addEventListener('input', () => this.renderList());
 
-            const categoryFilter = this.mainDialog.element.querySelector('#pm-filter-category');
+            const categoryFilter = this.tabElement.querySelector('#pm-filter-category');
             categoryFilter.addEventListener('change', () => this.renderList());
 
-            const catBtn = this.mainDialog.element.querySelector('#pm-cat-btn');
+            const catBtn = this.tabElement.querySelector('#pm-cat-btn');
             catBtn.addEventListener('click', () => {
                 this.showCategoryManagerDialog();
             });
 
-            const addBtn = this.mainDialog.element.querySelector('#pm-add-btn');
+            const addBtn = this.tabElement.querySelector('#pm-add-btn');
             addBtn.addEventListener('click', () => {
                 if (this.currentTab === 'texts') {
                     this.showTextDialog();
@@ -745,23 +778,23 @@
                 }
             });
 
-            const lockBtn = this.mainDialog.element.querySelector('#pm-lock-btn');
+            const lockBtn = this.tabElement.querySelector('#pm-lock-btn');
             lockBtn.addEventListener('click', () => {
                 this.lockVault();
                 siyuan.showMessage(this.i18n.vaultLocked);
             });
             
-            const exportJsonBtn = this.mainDialog.element.querySelector('#pm-export-json-btn');
+            const exportJsonBtn = this.tabElement.querySelector('#pm-export-json-btn');
             exportJsonBtn.addEventListener('click', () => this.exportToJson());
             
-            const exportNoteUnencryptedBtn = this.mainDialog.element.querySelector('#pm-export-note-unencrypted-btn');
+            const exportNoteUnencryptedBtn = this.tabElement.querySelector('#pm-export-note-unencrypted-btn');
             exportNoteUnencryptedBtn.addEventListener('click', () => this.exportToNote(false));
             
-            const exportNoteEncryptedBtn = this.mainDialog.element.querySelector('#pm-export-note-encrypted-btn');
+            const exportNoteEncryptedBtn = this.tabElement.querySelector('#pm-export-note-encrypted-btn');
             exportNoteEncryptedBtn.addEventListener('click', () => this.exportToNote(true));
 
             this.usernameSortOrder = null;
-            const sortUsernameBtn = this.mainDialog.element.querySelector('#pm-sort-username');
+            const sortUsernameBtn = this.tabElement.querySelector('#pm-sort-username');
             sortUsernameBtn.addEventListener('click', () => {
                 if (this.usernameSortOrder === null) {
                     this.usernameSortOrder = 'asc';
@@ -777,9 +810,9 @@
         }
 
         renderList() {
-            if (!this.mainDialog) return;
-            const searchInput = this.mainDialog.element.querySelector('#pm-search');
-            const categoryFilter = this.mainDialog.element.querySelector('#pm-filter-category');
+            if (!this.tabElement) return;
+            const searchInput = this.tabElement.querySelector('#pm-search');
+            const categoryFilter = this.tabElement.querySelector('#pm-filter-category');
             const query = searchInput ? searchInput.value.toLowerCase() : '';
             const catId = categoryFilter ? categoryFilter.value : '';
 
@@ -791,8 +824,8 @@
         }
 
         renderPasswordsList(query, catId) {
-            const listEl = this.mainDialog.element.querySelector('#pm-list');
-            const sortIcon = this.mainDialog.element.querySelector('#pm-sort-icon');
+            const listEl = this.tabElement.querySelector('#pm-list');
+            const sortIcon = this.tabElement.querySelector('#pm-sort-icon');
             
             if (sortIcon) {
                 if (this.usernameSortOrder === 'asc') sortIcon.textContent = '↑';
@@ -901,7 +934,7 @@
         }
 
         renderTextsList(query, catId) {
-            const listEl = this.mainDialog.element.querySelector('#pm-texts-list');
+            const listEl = this.tabElement.querySelector('#pm-texts-list');
             listEl.innerHTML = '';
             
             let texts = (this.vaultData.encryptedTexts || []).filter(e => {
@@ -1334,9 +1367,9 @@
                                 this.vaultData.categories = this.vaultData.categories.filter(c => c.id !== cat.id);
                                 await this.saveVault();
                                 renderCatList();
-                                // Refresh main dialog if it's open
-                                if (this.mainDialog) {
-                                    this.showMainDialog();
+                                // Refresh main tab if it's open
+                                if (this.tabElement) {
+                                    this.renderTabContent();
                                 }
                             }
                         });
@@ -1362,9 +1395,9 @@
                 input.value = '';
                 renderCatList();
                 
-                // Refresh main dialog if it's open
-                if (this.mainDialog) {
-                    this.showMainDialog();
+                // Refresh main tab if it's open
+                if (this.tabElement) {
+                    this.renderTabContent();
                 }
             });
         }
