@@ -437,40 +437,53 @@
                     this.vaultData = { entries: [], categories: [], encryptedTexts: [] };
                 }
 
-                // Data migration for categories
-                if (!this.vaultData.categories || this.vaultData.categories.length === 0) {
-                    this.vaultData.categories = [
-                        { id: 'default_work', name: this.i18n.defaultCatWork || 'Work' },
-                        { id: 'default_finance', name: this.i18n.defaultCatFinance || 'Finance' },
-                        { id: 'default_social', name: this.i18n.defaultCatSocial || 'Social' },
-                        { id: 'default_life', name: this.i18n.defaultCatLife || 'Life' },
-                        { id: 'default', name: this.i18n.defaultCatOther || 'Uncategorized' }
-                    ];
+                // Ensure categories array exists
+                if (!this.vaultData.categories) {
+                    this.vaultData.categories = [];
+                }
+
+                // Add default categories if they don't exist
+                const defaultCats = [
+                    { id: 'default_work', name: this.i18n.defaultCatWork || 'Work' },
+                    { id: 'default_finance', name: this.i18n.defaultCatFinance || 'Finance' },
+                    { id: 'default_social', name: this.i18n.defaultCatSocial || 'Social' },
+                    { id: 'default_life', name: this.i18n.defaultCatLife || 'Life' },
+                    { id: 'default', name: this.i18n.defaultCatOther || 'Uncategorized' }
+                ];
+
+                defaultCats.forEach(defCat => {
+                    if (!this.vaultData.categories.find(c => c.id === defCat.id)) {
+                        this.vaultData.categories.push(defCat);
+                    }
+                });
+                
+                // Data migration for legacy 'group' field to 'categoryId'
+                const groups = new Set(this.vaultData.entries.map(e => e.group).filter(Boolean));
+                groups.forEach(g => {
+                    // Skip if it matches one of our defaults
+                    const isDefault = [
+                        this.i18n.defaultCatWork, this.i18n.defaultCatFinance, 
+                        this.i18n.defaultCatSocial, this.i18n.defaultCatLife, 
+                        this.i18n.defaultCatOther, this.i18n.defaultGroup
+                    ].includes(g);
                     
-                    const groups = new Set(this.vaultData.entries.map(e => e.group).filter(Boolean));
-                    groups.forEach(g => {
-                        // Skip if it matches one of our defaults
-                        const isDefault = [
-                            this.i18n.defaultCatWork, this.i18n.defaultCatFinance, 
-                            this.i18n.defaultCatSocial, this.i18n.defaultCatLife, 
-                            this.i18n.defaultCatOther, this.i18n.defaultGroup
-                        ].includes(g);
-                        
-                        if (!isDefault) {
+                    if (!isDefault) {
+                        const existingCat = this.vaultData.categories.find(c => c.name === g);
+                        if (!existingCat) {
                             this.vaultData.categories.push({ id: 'cat_' + Date.now() + '_' + Math.floor(Math.random()*1000), name: g });
                         }
-                    });
-                    
-                    this.vaultData.entries.forEach(e => {
-                        if (e.group) {
-                            const cat = this.vaultData.categories.find(c => c.name === e.group);
-                            e.categoryId = cat ? cat.id : 'default';
-                            delete e.group;
-                        } else if (!e.categoryId) {
-                            e.categoryId = 'default';
-                        }
-                    });
-                }
+                    }
+                });
+                
+                this.vaultData.entries.forEach(e => {
+                    if (e.group) {
+                        const cat = this.vaultData.categories.find(c => c.name === e.group);
+                        e.categoryId = cat ? cat.id : 'default';
+                        delete e.group;
+                    } else if (!e.categoryId) {
+                        e.categoryId = 'default';
+                    }
+                });
 
                 if (!this.vaultData.encryptedTexts) {
                     this.vaultData.encryptedTexts = [];
