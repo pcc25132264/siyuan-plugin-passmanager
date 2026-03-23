@@ -79,6 +79,14 @@
   "addText": "添加文本",
   "editText": "编辑文本",
   "exportSuccess": "导出成功",
-  "exportNoteSuccess": "已成功导出到笔记本根目录下的新文档中",
-  "exportNoteFailed": "导出到笔记失败"
+  "exportNoteSuccess": "已成功导出到“密码箱”笔记本中",
+  "exportNoteFailed": "导出到笔记失败",
+  "passManagerNotebook": "密码箱",
+  "exportUnencryptedNote": "导出未加密笔记",
+  "exportEncryptedNote": "导出加密笔记",
+  "defaultCatWork": "工作",
+  "defaultCatFinance": "金融",
+  "defaultCatSocial": "社交",
+  "defaultCatLife": "生活",
+  "defaultCatOther": "未分类"
 }

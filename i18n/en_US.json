@@ -79,6 +79,14 @@
   "addText": "Add Text",
   "editText": "Edit Text",
   "exportSuccess": "Export successful",
-  "exportNoteSuccess": "Successfully exported to a new document in root",
-  "exportNoteFailed": "Failed to export to note"
+  "exportNoteSuccess": "Successfully exported to 'PassManager' notebook",
+  "exportNoteFailed": "Failed to export to note",
+  "passManagerNotebook": "PassManager",
+  "exportUnencryptedNote": "Export Unencrypted Note",
+  "exportEncryptedNote": "Export Encrypted Note",
+  "defaultCatWork": "Work",
+  "defaultCatFinance": "Finance",
+  "defaultCatSocial": "Social",
+  "defaultCatLife": "Life",
+  "defaultCatOther": "Uncategorized"
 }

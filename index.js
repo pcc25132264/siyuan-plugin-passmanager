@@ -433,11 +433,25 @@
                 }
 
                 // Data migration for categories
-                if (!this.vaultData.categories) {
-                    this.vaultData.categories = [{ id: 'default', name: this.i18n.defaultGroup }];
+                if (!this.vaultData.categories || this.vaultData.categories.length === 0) {
+                    this.vaultData.categories = [
+                        { id: 'default_work', name: this.i18n.defaultCatWork || 'Work' },
+                        { id: 'default_finance', name: this.i18n.defaultCatFinance || 'Finance' },
+                        { id: 'default_social', name: this.i18n.defaultCatSocial || 'Social' },
+                        { id: 'default_life', name: this.i18n.defaultCatLife || 'Life' },
+                        { id: 'default', name: this.i18n.defaultCatOther || 'Uncategorized' }
+                    ];
+                    
                     const groups = new Set(this.vaultData.entries.map(e => e.group).filter(Boolean));
                     groups.forEach(g => {
-                        if (g !== this.i18n.defaultGroup) {
+                        // Skip if it matches one of our defaults
+                        const isDefault = [
+                            this.i18n.defaultCatWork, this.i18n.defaultCatFinance, 
+                            this.i18n.defaultCatSocial, this.i18n.defaultCatLife, 
+                            this.i18n.defaultCatOther, this.i18n.defaultGroup
+                        ].includes(g);
+                        
+                        if (!isDefault) {
                             this.vaultData.categories.push({ id: 'cat_' + Date.now() + '_' + Math.floor(Math.random()*1000), name: g });
                         }
                     });
@@ -447,7 +461,7 @@
                             const cat = this.vaultData.categories.find(c => c.name === e.group);
                             e.categoryId = cat ? cat.id : 'default';
                             delete e.group;
-                        } else {
+                        } else if (!e.categoryId) {
                             e.categoryId = 'default';
                         }
                     });
@@ -561,7 +575,17 @@
                     }
                     
                     this.locked = false;
-                    this.vaultData = { entries: [], categories: [{ id: 'default', name: this.i18n.defaultGroup }] };
+                    this.vaultData = { 
+                        entries: [], 
+                        categories: [
+                            { id: 'default_work', name: this.i18n.defaultCatWork || 'Work' },
+                            { id: 'default_finance', name: this.i18n.defaultCatFinance || 'Finance' },
+                            { id: 'default_social', name: this.i18n.defaultCatSocial || 'Social' },
+                            { id: 'default_life', name: this.i18n.defaultCatLife || 'Life' },
+                            { id: 'default', name: this.i18n.defaultCatOther || 'Uncategorized' }
+                        ],
+                        encryptedTexts: [] 
+                    };
                     await this.saveVault();
                     dialog.destroy();
                     this.showMainDialog();
@@ -607,7 +631,8 @@
                             <input type="text" class="passmanager-search b3-text-field" id="pm-search" placeholder="${this.i18n.searchPlaceholder}">
                             <div class="passmanager-toolbar">
                                 <button class="passmanager-btn-secondary b3-button b3-button--outline" id="pm-export-json-btn">${this.i18n.exportJson || 'Export JSON'}</button>
-                                <button class="passmanager-btn-secondary b3-button b3-button--outline" id="pm-export-note-btn">${this.i18n.exportNote || 'Export Note'}</button>
+                                <button class="passmanager-btn-secondary b3-button b3-button--outline" id="pm-export-note-unencrypted-btn">${this.i18n.exportUnencryptedNote || 'Export Unencrypted Note'}</button>
+                                <button class="passmanager-btn-secondary b3-button b3-button--outline" id="pm-export-note-encrypted-btn">${this.i18n.exportEncryptedNote || 'Export Encrypted Note'}</button>
                                 <button class="passmanager-btn-secondary b3-button b3-button--outline" id="pm-cat-btn">${this.i18n.manageCategories || 'Manage Categories'}</button>
                                 <button class="passmanager-btn b3-button" id="pm-add-btn">${this.i18n.addEntry}</button>
                                 <button class="passmanager-btn-secondary b3-button b3-button--cancel" id="pm-lock-btn">${this.i18n.lock}</button>
@@ -712,8 +737,11 @@
             const exportJsonBtn = this.mainDialog.element.querySelector('#pm-export-json-btn');
             exportJsonBtn.addEventListener('click', () => this.exportToJson());
             
-            const exportNoteBtn = this.mainDialog.element.querySelector('#pm-export-note-btn');
-            exportNoteBtn.addEventListener('click', () => this.exportToNote());
+            const exportNoteUnencryptedBtn = this.mainDialog.element.querySelector('#pm-export-note-unencrypted-btn');
+            exportNoteUnencryptedBtn.addEventListener('click', () => this.exportToNote(false));
+            
+            const exportNoteEncryptedBtn = this.mainDialog.element.querySelector('#pm-export-note-encrypted-btn');
+            exportNoteEncryptedBtn.addEventListener('click', () => this.exportToNote(true));
 
             this.usernameSortOrder = null;
             const sortUsernameBtn = this.mainDialog.element.querySelector('#pm-sort-username');
@@ -1139,32 +1167,61 @@
             }
         }
 
-        async exportToNote() {
+        async exportToNote(encrypt = false) {
             try {
-                let markdown = '# PassManager Export\\n\\n';
+                let markdown = '# PassManager Export\n\n';
                 
-                markdown += '## Passwords\\n\\n';
-                markdown += '| Category | Title | Username | Password | URL | Notes |\\n';
-                markdown += '| --- | --- | --- | --- | --- | --- |\\n';
+                markdown += '## Passwords\n\n';
                 this.vaultData.entries.forEach(entry => {
                     const catName = this.vaultData.categories.find(c => c.id === entry.categoryId)?.name || 'Uncategorized';
-                    markdown += `| ${catName} | ${entry.title || ''} | ${entry.username || ''} | ${entry.password || ''} | ${entry.url || ''} | ${entry.notes ? entry.notes.replace(/\\n/g, '<br>') : ''} |\\n`;
+                    markdown += `### [${catName}] ${entry.title || 'Untitled'}\n\n`;
+                    if (entry.username) markdown += `- **Username:** ${entry.username}\n`;
+                    if (entry.password) markdown += `- **Password:** ${encrypt ? '***ENCRYPTED***' : entry.password}\n`;
+                    if (entry.url) markdown += `- **URL:** ${entry.url}\n`;
+                    if (entry.notes) markdown += `- **Notes:** ${entry.notes}\n`;
+                    markdown += '\n';
                 });
                 
                 if (this.vaultData.encryptedTexts && this.vaultData.encryptedTexts.length > 0) {
-                    markdown += '\\n## Encrypted Texts\\n\\n';
+                    markdown += '## Encrypted Texts\n\n';
                     this.vaultData.encryptedTexts.forEach(entry => {
                         const catName = this.vaultData.categories.find(c => c.id === entry.categoryId)?.name || 'Uncategorized';
-                        markdown += `### ${entry.title || 'Untitled'} (${catName})\\n\\n`;
-                        markdown += `**Text:**\\n\\n\`\`\`\\n${entry.text || ''}\\n\`\`\`\\n\\n`;
-                        if (entry.notes) {
-                            markdown += `**Notes:** ${entry.notes}\\n\\n`;
-                        }
+                        markdown += `### [${catName}] ${entry.title || 'Untitled'}\n\n`;
+                        markdown += `- **Content:**\n\n\`\`\`text\n${encrypt ? '***ENCRYPTED***' : (entry.text || '')}\n\`\`\`\n\n`;
+                        if (entry.notes) markdown += `- **Notes:** ${entry.notes}\n\n`;
                     });
                 }
                 
+                // Get or create PassManager notebook
+                let notebooks = [];
+                try {
+                    const lsNotebooks = await siyuan.fetchSyncPost('/api/notebook/lsNotebooks', {});
+                    notebooks = lsNotebooks.data.notebooks || [];
+                } catch (e) {
+                    console.error('Failed to list notebooks', e);
+                }
+                
+                const nbName = this.i18n.passManagerNotebook || 'PassManager';
+                let targetNb = notebooks.find(n => n.name === nbName);
+                
+                if (!targetNb) {
+                    try {
+                        const createNbRes = await siyuan.fetchSyncPost('/api/notebook/createNotebook', {
+                            name: nbName
+                        });
+                        if (createNbRes.code === 0) {
+                            targetNb = createNbRes.data.notebook;
+                        } else {
+                            throw new Error(createNbRes.msg);
+                        }
+                    } catch (e) {
+                        console.error('Failed to create notebook', e);
+                        throw new Error('Failed to create PassManager notebook');
+                    }
+                }
+                
                 const res = await siyuan.fetchSyncPost('/api/filetree/createDocWithMd', {
-                    notebook: window.siyuan.notebooks[0].id,
+                    notebook: targetNb.id,
                     path: `/PassManager-Export-${Date.now()}`,
                     markdown: markdown
                 });
