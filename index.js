@@ -1150,7 +1150,9 @@
 
         exportToJson() {
             try {
-                const dataStr = JSON.stringify(this.vaultData, null, 2);
+                // Use JSON.stringify and then JSON.parse to create a deep copy to avoid modifying original data
+                const exportData = JSON.parse(JSON.stringify(this.vaultData));
+                const dataStr = JSON.stringify(exportData, null, 2);
                 const blob = new Blob([dataStr], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
