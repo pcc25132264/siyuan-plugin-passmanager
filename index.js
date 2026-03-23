@@ -186,6 +186,7 @@
         }
 
         handleBlur() {
+            if (this.plugin.isExporting) return;
             this.plugin.lockVault();
         }
     }
@@ -339,6 +340,10 @@
             this.crypto.lock();
             this.locked = true;
             this.vaultData = { entries: [], categories: [] };
+            if (this.mainDialog) {
+                this.mainDialog.destroy();
+                this.mainDialog = null;
+            }
         }
 
         async saveVault() {
@@ -661,7 +666,7 @@
                                         <tr>
                                             <th>${this.i18n.category || 'Category'}</th>
                                             <th>${this.i18n.title}</th>
-                                            <th>${this.i18n.textContent || 'Text Content'}</th>
+                                            <th>${this.i18n.encryptedTextContent || 'Encrypted Text Content'}</th>
                                             <th>${this.i18n.notes || 'Notes'}</th>
                                             <th style="width: 120px;">${this.i18n.actions || 'Actions'}</th>
                                         </tr>
@@ -730,7 +735,6 @@
             const lockBtn = this.mainDialog.element.querySelector('#pm-lock-btn');
             lockBtn.addEventListener('click', () => {
                 this.lockVault();
-                this.mainDialog.destroy();
                 siyuan.showMessage(this.i18n.vaultLocked);
             });
             
@@ -889,7 +893,7 @@
             
             let texts = (this.vaultData.encryptedTexts || []).filter(e => {
                 const matchQuery = (e.title || '').toLowerCase().includes(query) || 
-                                   (e.text || '').toLowerCase().includes(query);
+                                   (e.encryptedTextContent || e.text || '').toLowerCase().includes(query);
                 const matchCat = catId ? e.categoryId === catId : true;
                 return matchQuery && matchCat;
             });
@@ -911,7 +915,7 @@
                     <td>
                         <div class="pm-td-content pm-td-with-copy">
                             <span class="pm-text-ellipsis">********</span>
-                            ${createCopyBtn(entry.text, this.i18n.textContent || 'Text Content')}
+                            ${createCopyBtn(entry.encryptedTextContent || entry.text, this.i18n.encryptedTextContent || 'Encrypted Text Content')}
                         </div>
                     </td>
                     <td><div class="pm-td-content pm-notes-ellipsis" title="${entry.notes || ''}">${entry.notes || '-'}</div></td>
@@ -1081,7 +1085,7 @@
                             ${categoryOptions}
                         </select>
                         
-                        <textarea class="passmanager-input b3-text-field" id="pm-text-content" placeholder="${this.i18n.textContent || 'Text Content'}" style="min-height: 120px;">${entry?.text || ''}</textarea>
+                        <textarea class="passmanager-input b3-text-field" id="pm-text-content" placeholder="${this.i18n.encryptedTextContent || 'Encrypted Text Content'}" style="min-height: 120px;">${entry?.encryptedTextContent || entry?.text || ''}</textarea>
                         
                         <textarea class="passmanager-input b3-text-field" id="pm-text-notes" placeholder="${this.i18n.notes}">${entry?.notes || ''}</textarea>
                         
@@ -1122,7 +1126,7 @@
                 const newEntry = {
                     id: entry?.id || now.toString(),
                     title: dialog.element.querySelector('#pm-text-title').value,
-                    text: dialog.element.querySelector('#pm-text-content').value,
+                    encryptedTextContent: dialog.element.querySelector('#pm-text-content').value,
                     categoryId: dialog.element.querySelector('#pm-text-category').value,
                     notes: dialog.element.querySelector('#pm-text-notes').value,
                     createdAt: entry?.createdAt || now,
@@ -1150,48 +1154,79 @@
 
         exportToJson() {
             try {
-                // Use JSON.stringify and then JSON.parse to create a deep copy to avoid modifying original data
-                const exportData = JSON.parse(JSON.stringify(this.vaultData));
+                this.isExporting = true;
+                const exportData = {
+                    entries: this.vaultData.entries.map(e => ({...e})),
+                    categories: this.vaultData.categories.map(c => ({...c})),
+                    encryptedTexts: (this.vaultData.encryptedTexts || []).map(e => ({...e}))
+                };
                 const dataStr = JSON.stringify(exportData, null, 2);
                 const blob = new Blob([dataStr], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
                 a.href = url;
                 a.download = `passmanager-export-${Date.now()}.json`;
+                a.addEventListener('click', (e) => e.stopPropagation());
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
                 siyuan.showMessage(this.i18n.exportSuccess || 'Export successful');
+                
+                // We do NOT call this.renderList() here because it's not needed
+                // and might cause issues if UI state is weird during file picker
+                
+                // Increase timeout to 30 seconds to prevent lockVault from firing
+                // if the user takes a long time in the save file dialog
+                if (this.exportTimer) clearTimeout(this.exportTimer);
+                this.exportTimer = setTimeout(() => {
+                    this.isExporting = false;
+                }, 30000);
             } catch (e) {
                 console.error('Export JSON failed', e);
                 siyuan.showMessage('Export JSON failed', 3000, 'error');
+                this.isExporting = false;
             }
         }
 
         async exportToNote(encrypt = false) {
             try {
+                this.isExporting = true;
                 let markdown = '# PassManager Export\n\n';
                 
                 markdown += '## Passwords\n\n';
-                this.vaultData.entries.forEach(entry => {
+                for (const entry of this.vaultData.entries) {
                     const catName = this.vaultData.categories.find(c => c.id === entry.categoryId)?.name || 'Uncategorized';
                     markdown += `### [${catName}] ${entry.title || 'Untitled'}\n\n`;
                     if (entry.username) markdown += `- **Username:** ${entry.username}\n`;
-                    if (entry.password) markdown += `- **Password:** ${encrypt ? '***ENCRYPTED***' : entry.password}\n`;
+                    if (entry.password) {
+                        let pwdDisplay = entry.password;
+                        if (encrypt) {
+                            const encRes = await this.crypto.encrypt(entry.password);
+                            pwdDisplay = `${encRes.iv}:${encRes.data}`;
+                        }
+                        markdown += `- **Password:** ${pwdDisplay}\n`;
+                    }
                     if (entry.url) markdown += `- **URL:** ${entry.url}\n`;
                     if (entry.notes) markdown += `- **Notes:** ${entry.notes}\n`;
                     markdown += '\n';
-                });
+                }
                 
                 if (this.vaultData.encryptedTexts && this.vaultData.encryptedTexts.length > 0) {
                     markdown += '## Encrypted Texts\n\n';
-                    this.vaultData.encryptedTexts.forEach(entry => {
+                    for (const entry of this.vaultData.encryptedTexts) {
                         const catName = this.vaultData.categories.find(c => c.id === entry.categoryId)?.name || 'Uncategorized';
                         markdown += `### [${catName}] ${entry.title || 'Untitled'}\n\n`;
-                        markdown += `- **Content:**\n\n\`\`\`text\n${encrypt ? '***ENCRYPTED***' : (entry.text || '')}\n\`\`\`\n\n`;
+                        
+                        let textDisplay = entry.encryptedTextContent || entry.text || '';
+                        if (encrypt && textDisplay) {
+                            const encRes = await this.crypto.encrypt(textDisplay);
+                            textDisplay = `${encRes.iv}:${encRes.data}`;
+                        }
+                        
+                        markdown += `- **${this.i18n.encryptedTextContent || 'Encrypted Text Content'}:**\n\n\`\`\`text\n${textDisplay}\n\`\`\`\n\n`;
                         if (entry.notes) markdown += `- **Notes:** ${entry.notes}\n\n`;
-                    });
+                    }
                 }
                 
                 // Get or create PassManager notebook
@@ -1233,9 +1268,15 @@
                 } else {
                     throw new Error(res.msg);
                 }
+                
+                if (this.exportTimer) clearTimeout(this.exportTimer);
+                this.exportTimer = setTimeout(() => {
+                    this.isExporting = false;
+                }, 5000);
             } catch (e) {
                 console.error('Export to Note failed', e);
                 siyuan.showMessage(this.i18n.exportNoteFailed || 'Failed to export to note', 3000, 'error');
+                this.isExporting = false;
             }
         }
 
