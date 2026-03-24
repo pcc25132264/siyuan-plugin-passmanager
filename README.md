@@ -4,6 +4,13 @@ A professional-grade password manager plugin for Siyuan Note, featuring industry
 
 > **⚠️ Disclaimer**: This plugin is provided "as is" without any warranties. The developers and contributors are **not responsible** for any data loss, security breaches, or damages arising from the use of this plugin. Users are solely responsible for maintaining backups of their data and ensuring the security of their master passwords. Use at your own risk.
 
+## What's New in v1.0.2
+
+- Fixed encrypted code block display after reopening notes: plaintext/ciphertext overlap no longer appears.
+- Improved crypto block recognition to handle language label edge cases with spaces/casing.
+- Added new lock controls in settings: Never Auto-Lock, Idle Timeout, and Lock on Window Blur.
+- Improved encrypted block UX with cleaner locked/unlocked overlay rendering.
+
 ## Why This Plugin?
 
 The idea for this plugin originated from a real-world security concern: Siyuan Note's Git Sync plugin commits sensitive information in the `data` directory to GitHub, which can expose private data to security risks. To address this, I developed this password manager plugin with strong encryption to ensure that sensitive credentials and private texts are securely protected and isolated from regular note data, preventing accidental leaks through version control systems.

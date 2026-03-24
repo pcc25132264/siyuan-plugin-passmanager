@@ -52,6 +52,12 @@
   "settings": "密码箱设置",
   "settingRequireUnlockTitle": "总是要求解锁",
   "settingRequireUnlockDesc": "关闭此选项后，将会在本地明文保存主密码（不安全！），打开密码箱时无需再次输入主密码。",
+  "settingNeverLockTitle": "永不自动锁定",
+  "settingNeverLockDesc": "开启后，密码库将一直保持解锁状态，直到您手动锁定或重启思源（默认开启）。",
+  "settingAutoLockTimeoutTitle": "闲置自动锁定时间（分钟）",
+  "settingAutoLockTimeoutDesc": "在未开启“永不自动锁定”时生效。设定多少分钟无操作后自动锁定密码库。",
+  "settingLockOnBlurTitle": "失去焦点时立即锁定",
+  "settingLockOnBlurDesc": "在未开启“永不自动锁定”时生效。切换到其他窗口导致思源失去焦点时立即锁定密码库。",
   "settingCryptoInfoTitle": "加密信息",
   "settingCryptoInfoDesc": "当前使用的加密算法及库的 Salt 盐值 (只读)",
   "algoName": "加密算法",
@@ -90,5 +96,10 @@
   "defaultCatFinance": "金融",
   "defaultCatSocial": "社交",
   "defaultCatLife": "生活",
-  "defaultCatOther": "未分类"
+  "defaultCatOther": "未分类",
+  "addEncryptedBlock": "添加加密块",
+  "encryptThisBlock": "加密此块",
+  "decryptThisBlock": "解密此块",
+  "encryptedBlockPlaceholder": "这是一个加密块。点击编辑...",
+  "vaultLockedPlaceholder": "🔒 密码库已锁定。点击解锁以查看内容。"
 }

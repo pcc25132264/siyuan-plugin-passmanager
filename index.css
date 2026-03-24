@@ -1,18 +1,19 @@
 .passmanager-container {
-    padding: 16px;
     height: 100%;
     box-sizing: border-box;
     display: flex;
     flex-direction: column;
+    background: var(--b3-theme-background);
 }
 
 .passmanager-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 16px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--b3-theme-surface-lighter);
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 12px;
 }
 
 .passmanager-search {
@@ -35,8 +36,6 @@
     flex-grow: 1;
     overflow-y: auto;
     overflow-x: auto;
-    border: 1px solid var(--b3-theme-surface-lighter);
-    border-radius: 4px;
     background: var(--b3-theme-background);
 }
 
@@ -47,7 +46,7 @@
 }
 
 .passmanager-table th, .passmanager-table td {
-    padding: 10px 12px;
+    padding: 12px 16px;
     border-bottom: 1px solid var(--b3-theme-surface-lighter);
     text-align: left;
     color: var(--b3-theme-on-background);
@@ -263,4 +262,17 @@ textarea.passmanager-input {
     padding: 8px;
     background: var(--b3-theme-surface);
     border-radius: 4px;
+}
+
+[data-type="NodeCodeBlock"][data-crypto-processed="true"] {
+    padding: 0 !important;
+    background-color: transparent !important;
+}
+
+[data-type="NodeCodeBlock"][data-crypto-processed="true"] > :not(.pm-crypto-overlay) {
+    display: none !important;
+}
+
+[data-type="NodeCodeBlock"][data-crypto-processed="true"] > .pm-crypto-overlay {
+    display: block !important;
 }

@@ -152,17 +152,24 @@
     }
 
     class AutoLockManager {
-        constructor(plugin, timeoutMinutes = 5, lockOnBlur = true) {
+        constructor(plugin) {
             this.plugin = plugin;
-            this.timeout = timeoutMinutes * 60 * 1000;
-            this.lockOnBlur = lockOnBlur;
             this.timer = null;
             this.resetTimer = this.resetTimer.bind(this);
             this.handleBlur = this.handleBlur.bind(this);
-            this.start();
         }
 
         start() {
+            this.stop(); // Remove any existing listeners and timer
+            
+            const config = this.plugin.pluginConfig || {};
+            const neverLock = config.neverLock !== false; // default true
+            
+            if (neverLock) return; // Do not start lock mechanisms
+            
+            this.timeout = (config.autoLockTimeout || 5) * 60 * 1000;
+            this.lockOnBlur = config.lockOnBlur || false;
+
             window.addEventListener('mousemove', this.resetTimer);
             window.addEventListener('keydown', this.resetTimer);
             if (this.lockOnBlur) {
@@ -191,6 +198,211 @@
         }
     }
 
+    class CryptoBlockManager {
+        constructor(plugin) {
+            this.plugin = plugin;
+            this.processedBlocks = new WeakSet();
+            
+            this.plugin.eventBus.on("loaded-protyle-static", this.handleProtyleLoad.bind(this));
+            this.plugin.eventBus.on("loaded-protyle-dynamic", this.handleProtyleLoad.bind(this));
+            this.plugin.eventBus.on("ws-main", this.handleWsMain.bind(this));
+        }
+        
+        handleProtyleLoad({ detail }) {
+            const blocks = detail.protyle.element.querySelectorAll('[data-type="NodeCodeBlock"]');
+            blocks.forEach(b => this.processBlock(b));
+        }
+        
+        handleWsMain({ detail }) {
+            if (detail.cmd === "transactions") {
+                requestAnimationFrame(() => {
+                    const blocks = document.querySelectorAll('[data-type="NodeCodeBlock"]:not([data-crypto-processed])');
+                    blocks.forEach(b => {
+                        const lang = b.querySelector('.protyle-action__language');
+                        if (lang && lang.textContent.trim().toLowerCase() === 'crypto') {
+                            this.processBlock(b);
+                        }
+                    });
+                });
+            }
+        }
+        
+        async processBlock(blockElement) {
+            const langDiv = blockElement.querySelector('.protyle-action__language');
+            if (!langDiv || langDiv.textContent.trim().toLowerCase() !== 'crypto') return;
+            
+            if (this.processedBlocks.has(blockElement)) return;
+            this.processedBlocks.add(blockElement);
+            blockElement.dataset.cryptoProcessed = "true";
+            
+            this.renderBlock(blockElement);
+        }
+        
+        async renderBlock(blockElement) {
+            const actionDiv = blockElement.querySelector('.protyle-action');
+            const contentDiv = blockElement.querySelector('.protyle-content') || blockElement.querySelector('[contenteditable="true"]');
+            if (!actionDiv && !contentDiv) return;
+            
+            // Remove existing overlay if any
+            let overlay = blockElement.querySelector('.pm-crypto-overlay');
+            if (overlay) overlay.remove();
+            
+            overlay = document.createElement('div');
+            overlay.className = 'pm-crypto-overlay';
+            overlay.contentEditable = "false";
+            overlay.style.padding = '12px 16px';
+            overlay.style.margin = '4px 0';
+            overlay.style.border = '1px solid var(--b3-theme-primary-lighter)';
+            overlay.style.borderRadius = '6px';
+            overlay.style.backgroundColor = 'var(--b3-theme-primary-lightest)';
+            overlay.style.color = 'var(--b3-theme-on-background)';
+            overlay.style.cursor = 'pointer';
+            overlay.style.transition = 'all 0.2s ease';
+            overlay.style.boxShadow = '0 1px 3px rgba(0,0,0,0.02)';
+            
+            overlay.addEventListener('mouseenter', () => {
+                overlay.style.borderColor = 'var(--b3-theme-primary)';
+                overlay.style.boxShadow = '0 2px 6px rgba(0,0,0,0.05)';
+            });
+            overlay.addEventListener('mouseleave', () => {
+                overlay.style.borderColor = 'var(--b3-theme-primary-lighter)';
+                overlay.style.boxShadow = '0 1px 3px rgba(0,0,0,0.02)';
+            });
+            
+            if (this.plugin.locked) {
+                overlay.innerHTML = `<div style="display: flex; align-items: center; gap: 8px; justify-content: center; color: var(--b3-theme-on-surface-light); padding: 8px 0;">
+                    <svg style="width: 18px; height: 18px;"><use xlink:href="#iconLock"></use></svg>
+                    <span>${this.plugin.i18n.vaultLockedPlaceholder || '🔒 密码库已锁定。点击解锁以查看内容。'}</span>
+                </div>`;
+                overlay.addEventListener('click', () => {
+                    this.plugin.openVault();
+                });
+            } else {
+                try {
+                    let textDiv = blockElement.querySelector('[contenteditable="true"]');
+                    let rawText = textDiv ? textDiv.textContent : '';
+                    rawText = rawText.replace(/\u200B/g, '').trim();
+                    
+                    if (!rawText) {
+                        overlay.innerHTML = `<div style="color: var(--b3-theme-on-surface-light); display: flex; align-items: center; gap: 6px;">
+                            <svg style="width: 14px; height: 14px;"><use xlink:href="#iconLock"></use></svg>
+                            ${this.plugin.i18n.encryptedBlockPlaceholder || '这是一个加密块。点击编辑...'}
+                        </div>`;
+                    } else {
+                        const parsed = JSON.parse(rawText);
+                        const decrypted = await this.plugin.crypto.decrypt(parsed.data, parsed.iv);
+                        const safeDiv = document.createElement('div');
+                        safeDiv.style.whiteSpace = 'pre-wrap';
+                        safeDiv.style.wordBreak = 'break-word';
+                        safeDiv.style.lineHeight = '1.6';
+                        
+                        let displayText = decrypted.content || decrypted;
+                        // Strip Siyuan Block IAL attributes like {: id="xxx" updated="xxx"}
+                        displayText = displayText.replace(/(?:\n\s*)?\{:[^}]+\}\s*$/, '');
+                        
+                        safeDiv.textContent = displayText;
+                        
+                        const headerDiv = document.createElement('div');
+                        headerDiv.style.display = 'flex';
+                        headerDiv.style.alignItems = 'center';
+                        headerDiv.style.gap = '6px';
+                        headerDiv.style.marginBottom = '8px';
+                        headerDiv.style.paddingBottom = '8px';
+                        headerDiv.style.borderBottom = '1px dashed var(--b3-theme-primary-lighter)';
+                        headerDiv.style.color = 'var(--b3-theme-primary)';
+                        headerDiv.style.fontSize = '12px';
+                        headerDiv.style.fontWeight = 'bold';
+                        headerDiv.innerHTML = `<svg style="width: 14px; height: 14px;"><use xlink:href="#iconUnlock"></use></svg><span>${this.plugin.i18n.decryptedContent || '解密内容'}</span>`;
+                        
+                        const container = document.createElement('div');
+                        container.appendChild(headerDiv);
+                        container.appendChild(safeDiv);
+                        
+                        overlay.appendChild(container);
+                    }
+                } catch (e) {
+                    console.error("Failed to decrypt block", e);
+                    overlay.innerHTML = `<div style="color: var(--b3-theme-error); display: flex; align-items: center; gap: 6px;">
+                        <svg style="width: 14px; height: 14px;"><use xlink:href="#iconInfo"></use></svg>
+                        解密失败。密码不正确或数据已损坏。
+                    </div>`;
+                }
+                
+                overlay.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.openEditDialog(blockElement);
+                });
+            }
+            
+            blockElement.appendChild(overlay);
+        }
+        
+        async openEditDialog(blockElement) {
+            if (this.plugin.locked) {
+                siyuan.showMessage(this.plugin.i18n.vaultLockedPlaceholder || "Vault locked", 3000, "error");
+                this.plugin.openVault();
+                return;
+            }
+            
+            const textDiv = blockElement.querySelector('[contenteditable="true"]');
+            let rawText = textDiv ? textDiv.textContent : '';
+            rawText = rawText.replace(/\u200B/g, '').trim();
+            
+            let currentText = '';
+            if (rawText) {
+                try {
+                    const parsed = JSON.parse(rawText);
+                    const decrypted = await this.plugin.crypto.decrypt(parsed.data, parsed.iv);
+                    currentText = decrypted.content || decrypted;
+                    // Strip Siyuan Block IAL attributes for editing
+                    currentText = currentText.replace(/(?:\n\s*)?\{:[^}]+\}\s*$/, '');
+                } catch(e) {}
+            }
+            
+            const dialog = new siyuan.Dialog({
+                title: this.plugin.i18n.editEntry || 'Edit Encrypted Block',
+                content: `
+                    <div style="padding: 16px; display: flex; flex-direction: column; gap: 16px; height: 100%;">
+                        <textarea class="b3-text-field" style="flex: 1; resize: none; min-height: 200px;" id="pm-crypto-textarea"></textarea>
+                        <div style="display: flex; justify-content: flex-end; gap: 8px;">
+                            <button class="b3-button b3-button--cancel" id="pm-crypto-cancel">${this.plugin.i18n.cancel || 'Cancel'}</button>
+                            <button class="b3-button" id="pm-crypto-save">${this.plugin.i18n.save || 'Save'}</button>
+                        </div>
+                    </div>
+                `,
+                width: '600px',
+                height: '400px'
+            });
+            
+            const textarea = dialog.element.querySelector('#pm-crypto-textarea');
+            textarea.value = currentText;
+            
+            dialog.element.querySelector('#pm-crypto-cancel').addEventListener('click', () => dialog.destroy());
+            
+            dialog.element.querySelector('#pm-crypto-save').addEventListener('click', async () => {
+                const newText = textarea.value;
+                try {
+                    const encrypted = await this.plugin.crypto.encrypt({ content: newText });
+                    const jsonStr = JSON.stringify(encrypted);
+                    
+                    const id = blockElement.getAttribute('data-node-id');
+                    const markdown = "```crypto\n" + jsonStr + "\n```";
+                    
+                    await siyuan.fetchSyncPost('/api/block/updateBlock', {
+                        dataType: "markdown",
+                        data: markdown,
+                        id: id
+                    });
+                    
+                    dialog.destroy();
+                } catch (e) {
+                    console.error(e);
+                    siyuan.showMessage("Failed to save encrypted block", 3000, "error");
+                }
+            });
+        }
+    }
+
     class PassManagerPlugin extends siyuan.Plugin {
         constructor(options) {
             super(options);
@@ -204,11 +416,45 @@
                 savedPassword: ''
             };
             this.currentTab = 'passwords'; // 'passwords' or 'texts'
+            this.cryptoBlockManager = new CryptoBlockManager(this);
         }
 
         async onload() {
             // Check if it's mobile environment
             this.isMobile = window.siyuan && window.siyuan.config && window.siyuan.config.system && window.siyuan.config.system.os === 'ios' || window.siyuan.config.system.os === 'android' || document.getElementById('sidebar');
+
+            this.protyleSlash = [{
+                filter: ["encrypt block", "加密块", "jiamikuai", "crypto"],
+                html: `<div class="b3-list-item__first"><svg class="b3-list-item__graphic"><use xlink:href="#iconLock"></use></svg><span class="b3-list-item__text">${this.i18n.addEncryptedBlock || '添加加密块'}</span></div>`,
+                id: "insert-encrypted-block",
+                callback: (protyle) => {
+                    protyle.insert("```crypto\n\n```");
+                }
+            }];
+            
+            this.eventBus.on("click-blockicon", ({ detail }) => {
+                const blockElements = detail.blockElements;
+                if (!blockElements || blockElements.length === 0) return;
+                
+                const blockElement = blockElements[0];
+                const type = blockElement.getAttribute("data-type");
+                const isCrypto = blockElement.dataset.cryptoProcessed === "true" || 
+                                 (type === "NodeCodeBlock" && blockElement.querySelector('.protyle-action__language')?.textContent === 'crypto');
+                
+                if (isCrypto) {
+                    detail.menu.addItem({
+                        icon: "iconUnlock",
+                        label: this.i18n.decryptThisBlock || "Decrypt This Block",
+                        click: () => this.decryptBlock(blockElement)
+                    });
+                } else {
+                    detail.menu.addItem({
+                        icon: "iconLock",
+                        label: this.i18n.encryptThisBlock || "Encrypt This Block",
+                        click: () => this.encryptBlock(blockElement)
+                    });
+                }
+            });
 
             const topBarElement = this.addTopBar({
                 icon: 'iconLock',
@@ -232,10 +478,20 @@
             });
 
             // Load config
-            const pluginConfig = await this.loadData('plugin-config.json');
-            if (pluginConfig) {
-                this.pluginConfig = { ...this.pluginConfig, ...pluginConfig };
-            }
+        const pluginConfig = await this.loadData('plugin-config.json');
+        
+        // Initialize default configuration
+        this.pluginConfig = {
+            requireUnlock: true,
+            savedPassword: '',
+            neverLock: true,
+            autoLockTimeout: 5,
+            lockOnBlur: false
+        };
+        
+        if (pluginConfig) {
+            this.pluginConfig = { ...this.pluginConfig, ...pluginConfig };
+        }
 
             // Load salt and recovery data if exists
             const config = await this.loadData('vault-config.json');
@@ -255,6 +511,17 @@
             });
 
             this.setupSettings();
+            
+            // Try auto-unlock if configured
+            if (!this.pluginConfig.requireUnlock && this.pluginConfig.savedPassword && this.salt) {
+                try {
+                    await this.crypto.deriveKey(this.pluginConfig.savedPassword, this.salt);
+                    await this.loadVault();
+                    this.refreshCryptoBlocks();
+                } catch (e) {
+                    console.error("Auto-unlock failed", e);
+                }
+            }
         }
 
         setupSettings() {
@@ -279,6 +546,55 @@
                     checkbox.checked = this.pluginConfig.requireUnlock;
                     checkbox.addEventListener('change', () => {
                         this.pluginConfig.requireUnlock = checkbox.checked;
+                    });
+                    return checkbox;
+                },
+            });
+
+            this.setting.addItem({
+                title: this.i18n.settingNeverLockTitle || 'Never Auto-Lock',
+                description: this.i18n.settingNeverLockDesc || 'Keep the vault unlocked indefinitely.',
+                createActionElement: () => {
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.className = 'b3-switch fn__flex-center';
+                    checkbox.checked = this.pluginConfig.neverLock !== false; // default true
+                    checkbox.addEventListener('change', () => {
+                        this.pluginConfig.neverLock = checkbox.checked;
+                        if (this.autoLock) this.autoLock.start(); // re-eval
+                    });
+                    return checkbox;
+                },
+            });
+
+            this.setting.addItem({
+                title: this.i18n.settingAutoLockTimeoutTitle || 'Auto-Lock Timeout (mins)',
+                description: this.i18n.settingAutoLockTimeoutDesc || 'Time in minutes before locking due to inactivity.',
+                createActionElement: () => {
+                    const input = document.createElement('input');
+                    input.type = 'number';
+                    input.className = 'b3-text-field fn__size200';
+                    input.min = '1';
+                    input.value = this.pluginConfig.autoLockTimeout || 5;
+                    input.addEventListener('change', () => {
+                        this.pluginConfig.autoLockTimeout = parseInt(input.value, 10) || 5;
+                        if (this.autoLock) this.autoLock.start(); // re-eval
+                    });
+                    return input;
+                },
+            });
+
+            this.setting.addItem({
+                title: this.i18n.settingLockOnBlurTitle || 'Lock on Window Blur',
+                description: this.i18n.settingLockOnBlurDesc || 'Lock immediately when Siyuan loses focus.',
+                createActionElement: () => {
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.className = 'b3-switch fn__flex-center';
+                    checkbox.checked = this.pluginConfig.lockOnBlur || false;
+                    checkbox.addEventListener('change', () => {
+                        this.pluginConfig.lockOnBlur = checkbox.checked;
+                        if (this.autoLock) this.autoLock.start(); // re-eval
                     });
                     return checkbox;
                 },
@@ -359,6 +675,64 @@ console.log(JSON.parse(decrypted));
             }
             this.lockVault();
         }
+        
+        async encryptBlock(blockElement) {
+            if (this.locked) {
+                siyuan.showMessage(this.i18n.vaultLockedPlaceholder || "Vault locked", 3000, "error");
+                this.openVault();
+                return;
+            }
+            const id = blockElement.getAttribute("data-node-id");
+            
+            const res = await siyuan.fetchSyncPost('/api/block/getBlockKramdown', { id });
+            if (res.code !== 0) {
+                siyuan.showMessage("Failed to get block data", 3000, "error");
+                return;
+            }
+            const kramdown = res.data.kramdown;
+            
+            try {
+                const encrypted = await this.crypto.encrypt({ content: kramdown });
+                const jsonStr = JSON.stringify(encrypted);
+                const markdown = "```crypto\n" + jsonStr + "\n```";
+                
+                await siyuan.fetchSyncPost('/api/block/updateBlock', {
+                    dataType: "markdown",
+                    data: markdown,
+                    id: id
+                });
+            } catch(e) {
+                console.error(e);
+                siyuan.showMessage("Encryption failed", 3000, "error");
+            }
+        }
+        
+        async decryptBlock(blockElement) {
+            if (this.locked) {
+                siyuan.showMessage(this.i18n.vaultLockedPlaceholder || "Vault locked", 3000, "error");
+                this.openVault();
+                return;
+            }
+            const id = blockElement.getAttribute("data-node-id");
+            const textDiv = blockElement.querySelector('[contenteditable="true"]');
+            let rawText = textDiv ? textDiv.textContent : '';
+            rawText = rawText.replace(/\u200B/g, '').trim();
+            
+            try {
+                const parsed = JSON.parse(rawText);
+                const decrypted = await this.crypto.decrypt(parsed.data, parsed.iv);
+                const kramdown = decrypted.content || decrypted;
+                
+                await siyuan.fetchSyncPost('/api/block/updateBlock', {
+                    dataType: "markdown",
+                    data: kramdown,
+                    id: id
+                });
+            } catch(e) {
+                console.error(e);
+                siyuan.showMessage("Decryption failed", 3000, "error");
+            }
+        }
 
         async openVault() {
             if (this.locked) {
@@ -388,10 +762,10 @@ console.log(JSON.parse(decrypted));
                     id: this.name + "passmanager-tab"
                 }
             });
-            // If the tab is already open, it will just focus it. We should ensure it's rendered correctly.
             if (this.tabElement) {
                 this.renderTabContent();
             }
+            this.refreshCryptoBlocks();
         }
 
         lockVault() {
@@ -400,6 +774,16 @@ console.log(JSON.parse(decrypted));
             this.vaultData = { entries: [], categories: [] };
             if (this.tabElement) {
                 this.renderTabContent();
+            }
+            this.refreshCryptoBlocks();
+        }
+
+        refreshCryptoBlocks() {
+            if (this.cryptoBlockManager) {
+                const blocks = document.querySelectorAll('[data-crypto-processed="true"]');
+                blocks.forEach(b => {
+                    this.cryptoBlockManager.renderBlock(b);
+                });
             }
         }
 
@@ -549,8 +933,9 @@ console.log(JSON.parse(decrypted));
                 this.locked = false;
                 
                 if (!this.autoLock) {
-                    this.autoLock = new AutoLockManager(this, 5, true);
+                    this.autoLock = new AutoLockManager(this);
                 }
+                this.autoLock.start();
             } catch (e) {
                 console.error(e);
                 throw new Error(this.i18n.unlockFailed);
@@ -674,6 +1059,7 @@ console.log(JSON.parse(decrypted));
                     };
                     await this.saveVault();
                     this.renderTabContent();
+                    this.refreshCryptoBlocks();
                 } else {
                     try {
                         await this.crypto.deriveKey(pwd, this.salt);
@@ -685,6 +1071,7 @@ console.log(JSON.parse(decrypted));
                         }
                         
                         this.renderTabContent();
+                        this.refreshCryptoBlocks();
                     } catch (e) {
                         siyuan.showMessage(e.message, 3000, 'error');
                     }
@@ -704,8 +1091,8 @@ console.log(JSON.parse(decrypted));
                 this.vaultData.categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
 
             this.tabElement.innerHTML = `
-                <div class="passmanager-container" style="height: 100%; display: flex; flex-direction: column;">
-                    <div class="passmanager-header" style="padding: 16px; border-bottom: 1px solid var(--b3-theme-surface-lighter); background: var(--b3-theme-background);">
+                <div class="passmanager-container">
+                    <div class="passmanager-header">
                         <div class="passmanager-tabs" style="display: flex; gap: 8px; margin-right: auto;">
                             <button class="b3-button pm-tab-btn" data-tab="passwords">${this.i18n.passwordsTab || 'Passwords'}</button>
                             <button class="b3-button b3-button--outline pm-tab-btn" data-tab="texts">${this.i18n.encryptedTextsTab || 'Encrypted Texts'}</button>
