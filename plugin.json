@@ -2,7 +2,7 @@
   "name": "siyuan-plugin-passmanager",
   "author": "Xingxing",
   "url": "https://github.com/siyuan-note/siyuan-plugin-passmanager",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "minAppVersion": "3.0.0",
   "backends": ["windows", "linux", "darwin", "docker", "ios", "android"],
   "frontends": ["desktop", "desktop-window", "mobile", "browser", "browser-desktop", "browser-mobile"],

@@ -420,8 +420,8 @@
         }
 
         async onload() {
-            // Check if it's mobile environment
-            this.isMobile = window.siyuan && window.siyuan.config && window.siyuan.config.system && window.siyuan.config.system.os === 'ios' || window.siyuan.config.system.os === 'android' || document.getElementById('sidebar');
+            const os = window?.siyuan?.config?.system?.os;
+            this.isMobile = os === 'ios' || os === 'android' || !!document.getElementById('sidebar');
 
             this.protyleSlash = [{
                 filter: ["encrypt block", "加密块", "jiamikuai", "crypto"],
@@ -461,9 +461,39 @@
                 title: this.i18n.pluginName,
                 position: 'right',
                 callback: () => {
-                    this.openVault();
+                    this.openPreferredEntry();
                 }
             });
+
+            if (this.isMobile) {
+                this.addDock({
+                    config: {
+                        position: "RightTop",
+                        size: {
+                            width: 400,
+                            height: 600
+                        },
+                        icon: "iconLock",
+                        title: this.i18n.pluginName || "PassManager",
+                        show: true
+                    },
+                    data: {},
+                    type: "mobile-entry",
+                    init: (custom) => {
+                        this.tabElement = custom.element;
+                        this.renderTabContent();
+                        this.refreshCryptoBlocks();
+                    },
+                    update: () => {
+                        if (this.tabElement) {
+                            this.renderTabContent();
+                        }
+                    },
+                    destroy: () => {
+                        this.tabElement = null;
+                    }
+                });
+            }
 
             const plugin = this;
             this.addTab({
@@ -504,9 +534,10 @@
             
             this.addCommand({
                 langKey: 'openVault',
+                langText: this.i18n.pluginName || 'Password Manager',
                 hotkey: '⇧⌘P',
                 callback: () => {
-                    this.openVault();
+                    this.openPreferredEntry();
                 }
             });
 
@@ -670,10 +701,26 @@ console.log(JSON.parse(decrypted));
         }
 
         onunload() {
+            if (this.mainDialog) {
+                this.mainDialog.destroy();
+                this.mainDialog = null;
+            }
             if (this.autoLock) {
                 this.autoLock.stop();
             }
             this.lockVault();
+        }
+
+        openSetting() {
+            if (this.isMobile) {
+                this.openPreferredEntry();
+                return;
+            }
+            super.openSetting();
+        }
+
+        openPreferredEntry() {
+            this.openVault();
         }
         
         async encryptBlock(blockElement) {
@@ -754,17 +801,84 @@ console.log(JSON.parse(decrypted));
         }
 
         openMainTab() {
-            siyuan.openTab({
-                app: this.app,
-                custom: {
-                    icon: "iconLock",
-                    title: this.i18n.pluginName || "PassManager",
-                    id: this.name + "passmanager-tab"
+            if (this.isMobile) {
+                this.openMobileSidebarPanel();
+                return;
+            }
+            const canOpenTab = typeof siyuan.openTab === "function" && this.app;
+            if (!canOpenTab) {
+                this.openMainDialog();
+                return;
+            }
+            try {
+                siyuan.openTab({
+                    app: this.app,
+                    custom: {
+                        icon: "iconLock",
+                        title: this.i18n.pluginName || "PassManager",
+                        id: this.name + "passmanager-tab"
+                    }
+                });
+                if (this.tabElement) {
+                    this.renderTabContent();
+                }
+                this.refreshCryptoBlocks();
+            } catch (error) {
+                this.openMainDialog();
+            }
+        }
+
+        openMobileSidebarPanel() {
+            const sidebarElement = document.getElementById("sidebar");
+            const pluginPanelElement = sidebarElement?.querySelector('[data-type="sidebar-plugin"]');
+            if (!sidebarElement || !pluginPanelElement) {
+                return;
+            }
+            const toolbarElement = sidebarElement.querySelector(".toolbar--border");
+            const pluginTabIcon = toolbarElement?.querySelector('svg[data-type="sidebar-plugin-tab"]');
+            if (toolbarElement) {
+                toolbarElement.querySelectorAll(".toolbar__icon").forEach((item) => {
+                    item.classList.remove("toolbar__icon--active");
+                });
+            }
+            if (pluginTabIcon) {
+                pluginTabIcon.classList.add("toolbar__icon--active");
+            }
+            const panelContainer = sidebarElement.lastElementChild;
+            if (panelContainer) {
+                Array.from(panelContainer.children).forEach((item) => {
+                    if (item.getAttribute("data-type")) {
+                        item.classList.add("fn__none");
+                    }
+                });
+            }
+            pluginPanelElement.classList.remove("fn__none");
+            sidebarElement.style.transform = "translateX(0px)";
+            this.tabElement = pluginPanelElement;
+            this.renderTabContent();
+            this.refreshCryptoBlocks();
+        }
+
+        openMainDialog() {
+            if (this.mainDialog) {
+                this.mainDialog.destroy();
+            }
+            this.mainDialog = new siyuan.Dialog({
+                title: this.i18n.pluginName || "PassManager",
+                width: this.isMobile ? "96vw" : "1240px",
+                height: this.isMobile ? "92vh" : "88vh",
+                content: `<div class="passmanager-dialog-host" style="height:100%;"></div>`,
+                destroyCallback: () => {
+                    if (this.tabElement === this.dialogTabElement) {
+                        this.tabElement = null;
+                    }
+                    this.dialogTabElement = null;
+                    this.mainDialog = null;
                 }
             });
-            if (this.tabElement) {
-                this.renderTabContent();
-            }
+            this.dialogTabElement = this.mainDialog.element.querySelector(".passmanager-dialog-host");
+            this.tabElement = this.dialogTabElement;
+            this.renderTabContent();
             this.refreshCryptoBlocks();
         }
 
@@ -956,7 +1070,7 @@ console.log(JSON.parse(decrypted));
             const isSetup = !this.salt;
             this.tabElement.innerHTML = `
                 <div class="passmanager-tab-container" style="display: flex; justify-content: center; align-items: center; height: 100%; width: 100%; background: var(--b3-theme-background);">
-                    <div style="width: 400px; padding: 24px; border: 1px solid var(--b3-theme-surface-lighter); border-radius: 8px; background: var(--b3-theme-surface);">
+                    <div style="width: min(400px, calc(100% - 24px)); padding: 24px; border: 1px solid var(--b3-theme-surface-lighter); border-radius: 8px; background: var(--b3-theme-surface);">
                         <h3 style="margin-top: 0; text-align: center;">${isSetup ? this.i18n.setupMasterPassword : this.i18n.unlockTitle}</h3>
                         <div class="passmanager-dialog-form" style="margin-top: 16px;">
                             <input type="password" class="passmanager-input b3-text-field" id="pm-master-pwd" placeholder="${this.i18n.masterPassword}">
@@ -1093,24 +1207,36 @@ console.log(JSON.parse(decrypted));
             this.tabElement.innerHTML = `
                 <div class="passmanager-container">
                     <div class="passmanager-header">
-                        <div class="passmanager-tabs" style="display: flex; gap: 8px; margin-right: auto;">
-                            <button class="b3-button pm-tab-btn" data-tab="passwords">${this.i18n.passwordsTab || 'Passwords'}</button>
-                            <button class="b3-button b3-button--outline pm-tab-btn" data-tab="texts">${this.i18n.encryptedTextsTab || 'Encrypted Texts'}</button>
+                        <div class="passmanager-tabs">
+                            <button class="b3-button pm-tab-btn" data-tab="passwords">
+                                <span class="pm-tab-icon">🔐</span>
+                                <span class="pm-tab-text">${this.i18n.passwordsTab || 'Passwords'}</span>
+                            </button>
+                            <button class="b3-button b3-button--outline pm-tab-btn" data-tab="texts">
+                                <span class="pm-tab-icon">📝</span>
+                                <span class="pm-tab-text">${this.i18n.encryptedTextsTab || 'Encrypted Texts'}</span>
+                            </button>
                         </div>
-                        <select id="pm-filter-category" class="passmanager-select b3-select">
-                            ${categoryOptions}
-                        </select>
-                        <input type="text" class="passmanager-search b3-text-field" id="pm-search" placeholder="${this.i18n.searchPlaceholder}">
+                        <div class="pm-header-field pm-header-field-select">
+                            <span class="pm-header-icon">📁</span>
+                            <select id="pm-filter-category" class="passmanager-select b3-select">
+                                ${categoryOptions}
+                            </select>
+                        </div>
+                        <div class="pm-header-field pm-header-field-search">
+                            <span class="pm-header-icon">🔎</span>
+                            <input type="text" class="passmanager-search b3-text-field" id="pm-search" placeholder="${this.i18n.searchPlaceholder}">
+                        </div>
                         <div class="passmanager-toolbar">
-                            <button class="passmanager-btn-secondary b3-button b3-button--outline" id="pm-export-json-btn">${this.i18n.exportJson || 'Export JSON'}</button>
-                            <button class="passmanager-btn-secondary b3-button b3-button--outline" id="pm-export-note-unencrypted-btn">${this.i18n.exportUnencryptedNote || 'Export Unencrypted Note'}</button>
-                            <button class="passmanager-btn-secondary b3-button b3-button--outline" id="pm-export-note-encrypted-btn">${this.i18n.exportEncryptedNote || 'Export Encrypted Note'}</button>
-                            <button class="passmanager-btn-secondary b3-button b3-button--outline" id="pm-cat-btn">${this.i18n.manageCategories || 'Manage Categories'}</button>
-                            <button class="passmanager-btn b3-button" id="pm-add-btn">${this.i18n.addEntry}</button>
-                            <button class="passmanager-btn-secondary b3-button b3-button--cancel" id="pm-lock-btn">${this.i18n.lock}</button>
+                            ${this.isMobile ? '' : `<button class="passmanager-btn-secondary b3-button b3-button--outline pm-toolbar-btn pm-toolbar-tab" id="pm-export-json-btn"><span class="pm-toolbar-icon">📤</span><span class="pm-toolbar-text">${this.i18n.exportJson || 'Export JSON'}</span></button>`}
+                            <button class="passmanager-btn-secondary b3-button b3-button--outline pm-toolbar-btn pm-toolbar-tab" id="pm-export-note-unencrypted-btn"><span class="pm-toolbar-icon">📄</span><span class="pm-toolbar-text">${this.i18n.exportUnencryptedNote || 'Export Unencrypted Note'}</span></button>
+                            <button class="passmanager-btn-secondary b3-button b3-button--outline pm-toolbar-btn pm-toolbar-tab" id="pm-export-note-encrypted-btn"><span class="pm-toolbar-icon">🔒</span><span class="pm-toolbar-text">${this.i18n.exportEncryptedNote || 'Export Encrypted Note'}</span></button>
+                            <button class="passmanager-btn-secondary b3-button b3-button--outline pm-toolbar-btn pm-toolbar-tab" id="pm-cat-btn"><span class="pm-toolbar-icon">🗂</span><span class="pm-toolbar-text">${this.i18n.manageCategories || 'Manage Categories'}</span></button>
+                            <button class="passmanager-btn b3-button pm-toolbar-btn pm-toolbar-btn--primary pm-toolbar-tab" id="pm-add-btn"><span class="pm-toolbar-icon">＋</span><span class="pm-toolbar-text">${this.i18n.addEntry}</span></button>
+                            <button class="passmanager-btn-secondary b3-button b3-button--cancel pm-toolbar-btn pm-toolbar-tab" id="pm-lock-btn"><span class="pm-toolbar-icon">🔐</span><span class="pm-toolbar-text">${this.i18n.lock}</span></button>
                         </div>
                     </div>
-                    <div class="passmanager-list" style="flex: 1; overflow: auto; padding: 16px; background: var(--b3-theme-background);">
+                    <div class="passmanager-list">
                         <div class="passmanager-table-wrapper">
                             <table class="passmanager-table" id="pm-table-passwords">
                                 <thead>
@@ -1149,7 +1275,7 @@ console.log(JSON.parse(decrypted));
             const tabBtns = this.tabElement.querySelectorAll('.pm-tab-btn');
             tabBtns.forEach(btn => {
                 btn.addEventListener('click', (e) => {
-                    const tab = e.target.getAttribute('data-tab');
+                    const tab = e.currentTarget.getAttribute('data-tab');
                     this.currentTab = tab;
                     tabBtns.forEach(b => {
                         if (b.getAttribute('data-tab') === tab) {
@@ -1203,7 +1329,9 @@ console.log(JSON.parse(decrypted));
             });
             
             const exportJsonBtn = this.tabElement.querySelector('#pm-export-json-btn');
-            exportJsonBtn.addEventListener('click', () => this.exportToJson());
+            if (exportJsonBtn) {
+                exportJsonBtn.addEventListener('click', () => this.exportToJson());
+            }
             
             const exportNoteUnencryptedBtn = this.tabElement.querySelector('#pm-export-note-unencrypted-btn');
             exportNoteUnencryptedBtn.addEventListener('click', () => this.exportToNote(false));
@@ -1285,15 +1413,15 @@ console.log(JSON.parse(decrypted));
                 const urlDisplay = entry.url ? `<a href="${entry.url}" target="_blank" class="pm-url-link">${entry.url}</a>` : '';
 
                 tr.innerHTML = `
-                    <td><div class="pm-td-content"><span class="pm-category-text">${catName}</span></div></td>
-                    <td><div class="pm-td-content" title="${entry.title || ''}">${entry.title || 'Untitled'}</div></td>
-                    <td>
+                    <td data-label="${this.i18n.category || 'Category'}"><div class="pm-td-content"><span class="pm-category-text">${catName}</span></div></td>
+                    <td data-label="${this.i18n.title || 'Title'}"><div class="pm-td-content" title="${entry.title || ''}">${entry.title || 'Untitled'}</div></td>
+                    <td data-label="${this.i18n.username || 'Username'}">
                         <div class="pm-td-content pm-td-with-copy">
                             <span class="pm-text-ellipsis" title="${entry.username || ''}">${entry.username || '-'}</span>
                             ${createCopyBtn(entry.username, this.i18n.username)}
                         </div>
                     </td>
-                    <td>
+                    <td data-label="${this.i18n.password || 'Password'}">
                         <div class="pm-td-content pm-td-with-copy" style="position: relative; display: flex; align-items: center;">
                             <span class="pm-text-ellipsis pm-secret-text" data-secret="${(entry.password || '').replace(/"/g, '&quot;')}">********</span>
                             <button class="b3-button b3-button--text b3-button--small pm-toggle-secret-btn" title="${this.i18n.showPassword || 'Show'}">
@@ -1302,14 +1430,14 @@ console.log(JSON.parse(decrypted));
                             ${createCopyBtn(entry.password, this.i18n.password)}
                         </div>
                     </td>
-                    <td>
+                    <td data-label="URL">
                         <div class="pm-td-content pm-td-with-copy">
                             <span class="pm-text-ellipsis" title="${entry.url || ''}">${urlDisplay || '-'}</span>
                             ${createCopyBtn(entry.url, 'URL')}
                         </div>
                     </td>
-                    <td><div class="pm-td-content pm-notes-ellipsis" title="${entry.notes || ''}">${entry.notes || '-'}</div></td>
-                    <td>
+                    <td data-label="${this.i18n.notes || 'Notes'}"><div class="pm-td-content pm-notes-ellipsis" title="${entry.notes || ''}">${entry.notes || '-'}</div></td>
+                    <td data-label="${this.i18n.actions || 'Actions'}">
                         <div class="passmanager-item-actions">
                             <button class="b3-button b3-button--text pm-edit" title="Edit" data-idx="${index}">
                                 <svg class="b3-button__icon"><use xlink:href="#iconEdit"></use></svg>
@@ -1395,9 +1523,9 @@ console.log(JSON.parse(decrypted));
                 };
 
                 tr.innerHTML = `
-                    <td><div class="pm-td-content"><span class="pm-category-text">${catName}</span></div></td>
-                    <td><div class="pm-td-content" title="${entry.title || ''}">${entry.title || 'Untitled'}</div></td>
-                    <td>
+                    <td data-label="${this.i18n.category || 'Category'}"><div class="pm-td-content"><span class="pm-category-text">${catName}</span></div></td>
+                    <td data-label="${this.i18n.title || 'Title'}"><div class="pm-td-content" title="${entry.title || ''}">${entry.title || 'Untitled'}</div></td>
+                    <td data-label="${this.i18n.encryptedTextContent || 'Encrypted Text Content'}">
                         <div class="pm-td-content pm-td-with-copy" style="position: relative; display: flex; align-items: center;">
                             <span class="pm-text-ellipsis pm-secret-text" data-secret="${(entry.encryptedTextContent || entry.text || '').replace(/"/g, '&quot;')}">********</span>
                             <button class="b3-button b3-button--text b3-button--small pm-toggle-secret-btn" title="${this.i18n.showPassword || 'Show'}">
@@ -1406,8 +1534,8 @@ console.log(JSON.parse(decrypted));
                             ${createCopyBtn(entry.encryptedTextContent || entry.text, this.i18n.encryptedTextContent || 'Encrypted Text Content')}
                         </div>
                     </td>
-                    <td><div class="pm-td-content pm-notes-ellipsis" title="${entry.notes || ''}">${entry.notes || '-'}</div></td>
-                    <td>
+                    <td data-label="${this.i18n.notes || 'Notes'}"><div class="pm-td-content pm-notes-ellipsis" title="${entry.notes || ''}">${entry.notes || '-'}</div></td>
+                    <td data-label="${this.i18n.actions || 'Actions'}">
                         <div class="passmanager-item-actions">
                             <button class="b3-button b3-button--text pm-edit" title="Edit" data-idx="${index}">
                                 <svg class="b3-button__icon"><use xlink:href="#iconEdit"></use></svg>
@@ -1484,43 +1612,38 @@ console.log(JSON.parse(decrypted));
             const dialog = new siyuan.Dialog({
                 title: isEdit ? this.i18n.editEntry : this.i18n.addEntry,
                 content: `
-                    <div class="passmanager-dialog-form" style="padding: 16px;">
+                    <div class="passmanager-dialog-form pm-form-shell ${this.isMobile ? 'pm-form-shell-mobile' : ''}">
                         <input type="text" class="passmanager-input b3-text-field" id="pm-entry-title" placeholder="${this.i18n.title}" value="${entry?.title || ''}">
                         <input type="text" class="passmanager-input b3-text-field" id="pm-entry-username" placeholder="${this.i18n.username}" value="${entry?.username || ''}">
-                        
-                        <div style="display: flex; gap: 8px; align-items: center;">
-                            <div style="position: relative; flex: 1; display: flex; align-items: center;">
-                                <input type="password" class="passmanager-input b3-text-field" style="width: 100%; padding-right: 32px;" id="pm-entry-password" placeholder="${this.i18n.password}" value="${entry?.password || ''}">
-                                <button class="b3-button b3-button--text pm-dialog-toggle-pwd" style="position: absolute; right: 4px; padding: 4px;" title="${this.i18n.showPassword || 'Show Password'}">
+                        <div class="pm-form-password-row">
+                            <div class="pm-form-password-field">
+                                <input type="password" class="passmanager-input b3-text-field pm-input-password" id="pm-entry-password" placeholder="${this.i18n.password}" value="${entry?.password || ''}">
+                                <button class="b3-button b3-button--text pm-dialog-toggle-pwd" title="${this.i18n.showPassword || 'Show Password'}">
                                     <svg class="b3-button__icon"><use xlink:href="#iconEyeoff"></use></svg>
                                 </button>
                             </div>
                             <button class="b3-button b3-button--outline" id="pm-gen-btn">${this.i18n.generatePassword}</button>
                         </div>
-                        
                         <input type="text" class="passmanager-input b3-text-field" id="pm-entry-url" placeholder="${this.i18n.url}" value="${entry?.url || ''}">
-                        
                         <select class="passmanager-input b3-select" id="pm-entry-category">
                             ${categoryOptions}
                         </select>
-                        
                         <textarea class="passmanager-input b3-text-field" id="pm-entry-notes" placeholder="${this.i18n.notes}">${entry?.notes || ''}</textarea>
-                        
                         ${isEdit ? `
-                            <div style="font-size: 12px; color: var(--b3-theme-on-surface-light); margin-top: 8px;">
+                            <div class="pm-form-meta">
                                 <div>${this.i18n.createdAt || 'Created'}: ${formatDate(entry.createdAt)}</div>
                                 <div>${this.i18n.updatedAt || 'Updated'}: ${formatDate(entry.updatedAt)}</div>
                             </div>
                         ` : ''}
-
-                        <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px;">
+                        <div class="pm-dialog-actions ${this.isMobile ? 'pm-dialog-actions-mobile' : ''}">
                             ${isEdit ? `<button class="b3-button b3-button--error" id="pm-del-btn">${this.i18n.delete}</button>` : ''}
                             <button class="b3-button b3-button--cancel" id="pm-cancel-btn">${this.i18n.cancel}</button>
                             <button class="b3-button" id="pm-save-btn">${this.i18n.save}</button>
                         </div>
                     </div>
                 `,
-                width: '500px'
+                width: this.isMobile ? "96vw" : "500px",
+                height: this.isMobile ? "92vh" : undefined
             });
 
             dialog.element.querySelector('#pm-gen-btn').addEventListener('click', () => {
@@ -1607,32 +1730,28 @@ console.log(JSON.parse(decrypted));
             const dialog = new siyuan.Dialog({
                 title: isEdit ? (this.i18n.editText || 'Edit Text') : (this.i18n.addText || 'Add Text'),
                 content: `
-                    <div class="passmanager-dialog-form" style="padding: 16px;">
+                    <div class="passmanager-dialog-form pm-form-shell ${this.isMobile ? 'pm-form-shell-mobile' : ''}">
                         <input type="text" class="passmanager-input b3-text-field" id="pm-text-title" placeholder="${this.i18n.title}" value="${entry?.title || ''}">
-                        
                         <select class="passmanager-input b3-select" id="pm-text-category">
                             ${categoryOptions}
                         </select>
-                        
                         <textarea class="passmanager-input b3-text-field" id="pm-text-content" placeholder="${this.i18n.encryptedTextContent || 'Encrypted Text Content'}" style="min-height: 120px;">${entry?.encryptedTextContent || entry?.text || ''}</textarea>
-                        
                         <textarea class="passmanager-input b3-text-field" id="pm-text-notes" placeholder="${this.i18n.notes}">${entry?.notes || ''}</textarea>
-                        
                         ${isEdit ? `
-                            <div style="font-size: 12px; color: var(--b3-theme-on-surface-light); margin-top: 8px;">
+                            <div class="pm-form-meta">
                                 <div>${this.i18n.createdAt || 'Created'}: ${formatDate(entry.createdAt)}</div>
                                 <div>${this.i18n.updatedAt || 'Updated'}: ${formatDate(entry.updatedAt)}</div>
                             </div>
                         ` : ''}
-
-                        <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px;">
+                        <div class="pm-dialog-actions ${this.isMobile ? 'pm-dialog-actions-mobile' : ''}">
                             ${isEdit ? `<button class="b3-button b3-button--error" id="pm-del-btn">${this.i18n.delete}</button>` : ''}
                             <button class="b3-button b3-button--cancel" id="pm-cancel-btn">${this.i18n.cancel}</button>
                             <button class="b3-button" id="pm-save-btn">${this.i18n.save}</button>
                         </div>
                     </div>
                 `,
-                width: '500px'
+                width: this.isMobile ? "96vw" : "500px",
+                height: this.isMobile ? "92vh" : undefined
             });
 
             dialog.element.querySelector('#pm-cancel-btn').addEventListener('click', () => {
