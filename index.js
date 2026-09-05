@@ -1304,12 +1304,13 @@ console.log(JSON.parse(decrypted));
                 okBtn.disabled = true;
 
                 try {
-                    // verify old password
+                    // verify old password，并从磁盘解出当前库数据（改密对话框不要求先解锁，故以磁盘为准）
                     const testCrypto = new CryptoManager();
                     await testCrypto.deriveKey(oldPwd, this.salt);
-                    const testConfig = await this.loadData('vault-data.json');
-                    if (testConfig && testConfig.data) {
-                        await testCrypto.decrypt(testConfig.data, testConfig.iv);
+                    const oldVaultConfig = await this.loadData('vault-data.json');
+                    let currentVaultData = this.vaultData;
+                    if (oldVaultConfig && oldVaultConfig.data) {
+                        currentVaultData = await testCrypto.decrypt(oldVaultConfig.data, oldVaultConfig.iv);
                     }
 
                     // 通过索引 + 遍历去重收集所有加密块，用旧密钥解密出来
@@ -1345,7 +1346,18 @@ console.log(JSON.parse(decrypted));
                         throw e;
                     }
 
-                    // 用新密钥重新加密加密块，直到全部完成
+                    // 用新密钥重加密库数据（以磁盘解出的为准，仅计算不落盘），失败即中止
+                    let newVaultEncrypted;
+                    try {
+                        newVaultEncrypted = await newCrypto.encrypt(currentVaultData);
+                    } catch (e) {
+                        this.dismissUpdateOverlay();
+                        okBtn.disabled = false;
+                        siyuan.showMessage(this.i18n.passwordChangeFailed || 'Old password incorrect', 3000, 'error');
+                        return;
+                    }
+
+                    // 用新密钥重新加密加密块，直到全部完成；任一块失败即中止，避免只换部分密钥导致损坏
                     let done = 0;
                     for (const blk of cryptoBlocks) {
                         try {
@@ -1359,11 +1371,21 @@ console.log(JSON.parse(decrypted));
                             done++;
                         } catch (e) {
                             console.error('重新加密加密块失败:', blk.id, e);
+                            this.dismissUpdateOverlay();
+                            okBtn.disabled = false;
+                            siyuan.showMessage(
+                                (this.i18n.changePasswordBlockFail || '有加密块重加密失败，已中止改密，请重试。'),
+                                7000, 'error'
+                            );
+                            return; // 中止，不提交新 salt
                         }
                         this.updateOverlayProgress(done);
                     }
 
-                    // 全部加密块更新完成后，才提交新密钥
+                    // 全部加密块 + 库数据均重加密成功，才真正提交：
+                    // 先写库数据（新密钥），确认落盘后再提交新密钥与新 salt
+                    await this.saveData('vault-data.json', newVaultEncrypted);
+                    this.vaultData = currentVaultData; // 同步内存中的库数据
                     this.crypto.key = newCrypto.key;
                     this.salt = newSalt;
                     const configData = { salt: this.salt };
@@ -1379,7 +1401,6 @@ console.log(JSON.parse(decrypted));
                     }
 
                     await this.saveData('vault-config.json', configData);
-                    await this.saveVault(); // re-save vault with new key
 
                     // 同步更新加密块索引
                     await this.saveCryptoBlockIndex(cryptoBlocks.map(b => b.id));

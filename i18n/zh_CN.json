@@ -71,6 +71,7 @@
   "updatingEncryptedBlocks": "正在重新加密加密块，请勿关闭...",
   "changePasswordAborted": "有",
   "changePasswordAbortedSuffix": " 个加密块无法用旧密码解密，已中止改密，请先处理损坏块。",
+  "changePasswordBlockFail": "有加密块重加密失败，已中止改密，请重试。",
   "scanAllDocumentsTitle": "遍历全库读文档",
   "scanAllDocumentsDesc": "遍历所有笔记本并重建加密块索引。仅在索引为空或不同步时需要（通常无需手动执行）。",
   "scanAllDocuments": "开始遍历",
