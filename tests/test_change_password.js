@@ -161,6 +161,19 @@ test('gatherCryptoBlocksForChange: 全部解不开 -> list 为空、failedCount=
     assert.strictEqual(list.length, 0);
 });
 
+test('gatherCryptoBlocksForChange: 返回 raws（旧密文）供失败回滚备份', async () => {
+    const p = makePlugin();
+    await p.saveCryptoBlockIndex(['b1', 'b2']);
+    p.getCryptoBlockById = async (id) => ({ id, data: 'old-data-' + id, iv: 'old-iv-' + id });
+    const okCrypto = { decrypt: async (data, iv) => ({ content: 'plain' }) };
+    const { list, raws } = await p.gatherCryptoBlocksForChange(okCrypto);
+    assert.strictEqual(list.length, 2);
+    assert.deepStrictEqual(raws, [
+        { id: 'b1', data: 'old-data-b1', iv: 'old-iv-b1' },
+        { id: 'b2', data: 'old-data-b2', iv: 'old-iv-b2' },
+    ], 'raws 应保存每块旧密文，用于回滚');
+});
+
 test('getCryptoBlockById: 从单块 kramdown 中提取加密块，非加密/缺失返回 null', async () => {
     const p = makePlugin();
     fakeSiyuan.fetchSyncPost = async (path, payload) => {

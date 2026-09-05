@@ -1122,7 +1122,9 @@ console.log(JSON.parse(decrypted));
 
         // 改密时收集所有加密块并用旧密钥（testCrypto）解密。
         // 优先使用持久化索引中的块 ID；仅当索引为空时才遍历全库兜底一次。
-        // 返回 { list: [{id, obj}], failedCount }，failedCount>0 时调用方应中止改密。
+        // 返回 { list: [{id, obj}], raws: [{id, iv, data}], failedCount }
+        //  - list：所有能解密成功的块（obj=明文）；raws：对应块的旧密文，用于失败回滚
+        //  - failedCount>0 时调用方应中止改密。
         async gatherCryptoBlocksForChange(testCrypto) {
             let ids = await this.loadCryptoBlockIndex();
             if (ids.length === 0) {
@@ -1131,6 +1133,7 @@ console.log(JSON.parse(decrypted));
             }
 
             const list = [];
+            const raws = []; // 旧的 {id, iv, data}，回滚用
             let failedCount = 0;
             const invalidIds = []; // 惰性清理：已被删除或已非加密的块 ID
             for (const id of ids) {
@@ -1139,6 +1142,7 @@ console.log(JSON.parse(decrypted));
                     invalidIds.push(id); // 块已删除或已非加密，改密时从索引剔除
                     continue;
                 }
+                raws.push({ id: info.id, iv: info.iv, data: info.data });
                 try {
                     const decrypted = await testCrypto.decrypt(info.data, info.iv);
                     list.push({ id, obj: decrypted });
@@ -1151,7 +1155,7 @@ console.log(JSON.parse(decrypted));
             if (invalidIds.length > 0) {
                 await this.saveCryptoBlockIndex(ids.filter(x => !invalidIds.includes(x)));
             }
-            return { list, failedCount };
+            return { list, raws, failedCount };
         }
 
         // ---------- 更新加密块时的全屏进度覆盖层，保证改密过程不可被打断 ----------
@@ -1160,13 +1164,24 @@ console.log(JSON.parse(decrypted));
             const ov = document.createElement('div');
             ov.id = 'pm-crypto-updating-overlay';
             ov.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:2147483000;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;';
-            ov.innerHTML = `<div style="background:var(--b3-theme-background);padding:28px 36px;border-radius:8px;box-shadow:0 2px 12px rgba(0,0,0,.12);text-align:center;min-width:260px;color:var(--b3-theme-on-background)">
-                <div style="font-size:14px;margin-bottom:12px">${this.i18n.updatingEncryptedBlocks || '正在重新加密加密块，请勿关闭...'}</div>
-                <div style="font-size:20px;font-weight:600" id="pm-crypto-updating-progress">0/${total || 0}</div>
+            ov.innerHTML = `<div style="background:var(--b3-theme-background);padding:28px 36px;border-radius:8px;box-shadow:0 2px 12px rgba(0,0,0,.12);text-align:center;min-width:300px;color:var(--b3-theme-on-background)">
+                <div style="font-size:15px;font-weight:600;margin-bottom:8px">${this.i18n.changingMasterPassword || '正在修改主密码'}</div>
+                <div style="font-size:13px;color:var(--b3-theme-on-surface-light);margin-bottom:12px" id="pm-crypto-updating-step">...</div>
+                <div style="font-size:20px;font-weight:600" id="pm-crypto-updating-progress"></div>
             </div>`;
             document.body.appendChild(ov);
             this.updateOverlay = ov;
             this.updateTotal = total || 0;
+            this.updateOverlayStep('');
+        }
+
+        // 更新当前进行到的步骤提示文本；progress 格式在调用方拼好传入
+        updateOverlayStep(text, progress) {
+            if (!this.updateOverlay) return;
+            const step = this.updateOverlay.querySelector('#pm-crypto-updating-step');
+            if (step && text) step.textContent = text;
+            const p = this.updateOverlay.querySelector('#pm-crypto-updating-progress');
+            if (p && progress != null) p.textContent = progress;
         }
 
         updateOverlayProgress(done) {
@@ -1333,10 +1348,10 @@ console.log(JSON.parse(decrypted));
                     const closeBtn = dialog.element.querySelector('.b3-dialog__close');
                     if (closeBtn) closeBtn.remove();
 
-                    // 全屏进度覆盖层，改密期间不可被打断
+                    // 全屏进度覆盖层，改密期间不可被打断（显示详细步骤提示）
                     this.startUpdateOverlay(cryptoBlocks.length);
 
-                    // 用新密码派生新密钥（先不切换 this.crypto，确保全部块更新成功后再提交）
+                    // 用新密码派生新密钥（先不切换 this.crypto，确保全部更新成功后再提交）
                     const newCrypto = new CryptoManager();
                     let newSalt;
                     try {
@@ -1346,9 +1361,10 @@ console.log(JSON.parse(decrypted));
                         throw e;
                     }
 
-                    // 用新密钥重加密库数据（以磁盘解出的为准，仅计算不落盘），失败即中止
+                    // 用新密钥重加密库数据（仅计算不落盘）
                     let newVaultEncrypted;
                     try {
+                        this.updateOverlayStep(this.i18n.stepEncryptVault || '第1步/共4步：正在用新主密码加密库数据...');
                         newVaultEncrypted = await newCrypto.encrypt(currentVaultData);
                     } catch (e) {
                         this.dismissUpdateOverlay();
@@ -1357,9 +1373,37 @@ console.log(JSON.parse(decrypted));
                         return;
                     }
 
-                    // 用新密钥重新加密加密块，直到全部完成；任一块失败即中止，避免只换部分密钥导致损坏
+                    // 写盘前备份所有旧值，供失败回滚
+                    const oldSaltConfig = (await this.loadData('vault-config.json')) || { salt: this.salt };
+                    const backup = {
+                        saltConfig: oldSaltConfig,
+                        vaultData: oldVaultConfig || null,
+                        blocks: gathered.raws || [], // [{id, iv, data}] 旧密文
+                    };
+                    const restoreBlock = async (raw) => {
+                        const markdown = "```crypto\n" + JSON.stringify({ iv: raw.iv, data: raw.data }) + "\n```";
+                        await siyuan.fetchSyncPost('/api/block/updateBlock', { dataType: "markdown", data: markdown, id: raw.id });
+                    };
+                    const rollback = async (writtenBlockIds) => {
+                        this.updateOverlayStep(this.i18n.stepRollback || '检测到失败，正在回滚到改密前状态...', '');
+                        for (const raw of backup.blocks) {
+                            if (!writtenBlockIds.has(raw.id)) continue;
+                            try { await restoreBlock(raw); } catch (e2) { console.error('回滚加密块失败:', raw.id, e2); }
+                        }
+                        try { if (backup.vaultData) await this.saveData('vault-data.json', backup.vaultData); } catch (e2) { console.error('回滚库数据失败', e2); }
+                        try { await this.saveData('vault-config.json', backup.saltConfig); } catch (e2) { console.error('回滚 salt 失败', e2); }
+                        this.salt = backup.saltConfig.salt != null ? backup.saltConfig.salt : backup.saltConfig;
+                        this.updateOverlayStep(this.i18n.stepRollbackDone || '已回滚，数据恢复为改密前状态。', '');
+                    };
+
+                    // 第2步：用新密钥重新加密加密块，直到全部完成；任一块失败即回滚
                     let done = 0;
+                    const writtenBlock = new Set();
                     for (const blk of cryptoBlocks) {
+                        this.updateOverlayStep(
+                            (this.i18n.stepUpdatingBlock || '第2步/共4步：正在重新加密加密块') + ` ${done + 1}/${cryptoBlocks.length}`,
+                            `${done + 1}/${cryptoBlocks.length}`
+                        );
                         try {
                             const enc = await newCrypto.encrypt(blk.obj);
                             const markdown = "```crypto\n" + JSON.stringify(enc) + "\n```";
@@ -1368,48 +1412,70 @@ console.log(JSON.parse(decrypted));
                                 data: markdown,
                                 id: blk.id
                             });
+                            writtenBlock.add(blk.id);
                             done++;
                         } catch (e) {
                             console.error('重新加密加密块失败:', blk.id, e);
-                            this.dismissUpdateOverlay();
+                            await rollback(writtenBlock);
                             okBtn.disabled = false;
+                            setTimeout(() => this.dismissUpdateOverlay(), 1600);
                             siyuan.showMessage(
-                                (this.i18n.changePasswordBlockFail || '有加密块重加密失败，已中止改密，请重试。'),
+                                (this.i18n.changePasswordBlockFail || '有加密块重加密失败，已回滚，请重试。'),
                                 7000, 'error'
                             );
-                            return; // 中止，不提交新 salt
+                            return; // 中止，未提交新 salt
                         }
                         this.updateOverlayProgress(done);
                     }
 
-                    // 全部加密块 + 库数据均重加密成功，才真正提交：
-                    // 先写库数据（新密钥），确认落盘后再提交新密钥与新 salt
-                    await this.saveData('vault-data.json', newVaultEncrypted);
-                    this.vaultData = currentVaultData; // 同步内存中的库数据
-                    this.crypto.key = newCrypto.key;
-                    this.salt = newSalt;
-                    const configData = { salt: this.salt };
+                    // 第3、4步：先写库数据，再提交新 salt；任一步写盘失败即回滚
+                    try {
+                        this.updateOverlayStep(this.i18n.stepWritingVault || '第3步/共4步：正在写入新的库数据...', '');
+                        await this.saveData('vault-data.json', newVaultEncrypted);
 
-                    if (siyuanPwd) {
-                        try {
-                            const recoveryData = await this.crypto.encryptTextWithPassword(newPwd, siyuanPwd, this.salt);
-                            configData.recoveryData = recoveryData;
-                            this.recoveryData = recoveryData;
-                        } catch (e) {
-                            console.error('Failed to create recovery data', e);
+                        const configData = { salt: newSalt };
+                        if (siyuanPwd) {
+                            try {
+                                const recoveryData = await newCrypto.encryptTextWithPassword(newPwd, siyuanPwd, newSalt);
+                                configData.recoveryData = recoveryData;
+                            } catch (e) {
+                                console.error('Failed to create recovery data', e);
+                            }
                         }
+
+                        this.updateOverlayStep(this.i18n.stepCommittingSalt || '第4步/共4步：正在提交新主密码...', '');
+                        await this.saveData('vault-config.json', configData);
+
+                        // 同步更新加密块索引
+                        this.updateOverlayStep(this.i18n.stepUpdatingIndex || '正在更新加密块索引...', '');
+                        await this.saveCryptoBlockIndex(cryptoBlocks.map(b => b.id));
+                    } catch (e) {
+                        // 写盘阶段失败：内存密钥尚未切换，回滚磁盘即可
+                        console.error('改密提交失败，进行回滚', e);
+                        await rollback(writtenBlock);
+                        okBtn.disabled = false;
+                        setTimeout(() => this.dismissUpdateOverlay(), 1600);
+                        siyuan.showMessage(
+                            (this.i18n.changePasswordBlockFail || '改密失败，已回滚，请重试。'),
+                            7000, 'error'
+                        );
+                        return;
                     }
 
-                    await this.saveData('vault-config.json', configData);
-
-                    // 同步更新加密块索引
-                    await this.saveCryptoBlockIndex(cryptoBlocks.map(b => b.id));
+                    // 所有磁盘写均成功，最后才切换内存密钥
+                    this.vaultData = currentVaultData;
+                    this.crypto.key = newCrypto.key;
+                    this.salt = newSalt;
+                    if (siyuanPwd) {
+                        try { this.recoveryData = await newCrypto.encryptTextWithPassword(newPwd, siyuanPwd, newSalt); } catch (e) { }
+                    }
                     this.refreshCryptoBlocks();
 
                     if (!this.pluginConfig.requireUnlock) {
                         await this.storeSavedPassword(newPwd);
                     }
 
+                    this.updateOverlayStep(this.i18n.stepDone || '完成', '');
                     this.dismissUpdateOverlay();
                     try { dialog.destroy(); } catch (e) { }
                     siyuan.showMessage(this.i18n.passwordChangeSuccess || 'Success');
