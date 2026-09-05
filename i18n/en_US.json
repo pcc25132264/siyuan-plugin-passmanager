@@ -56,7 +56,7 @@
   "categoryDeleteConfirm": "Are you sure you want to delete this category?",
   "settings": "Vault Settings",
   "settingRequireUnlockTitle": "Always Require Unlock",
-  "settingRequireUnlockDesc": "If disabled, the master password will be saved in plaintext locally (Unsafe!), and you won't need to type it when opening the vault.",
+  "settingRequireUnlockDesc": "If disabled, the master password will be encrypted and saved locally for auto-lock, so you won't need to type it when opening the vault.",
   "settingNeverLockTitle": "Never Auto-Lock",
   "settingNeverLockDesc": "Keep the vault unlocked indefinitely until manually locked or Siyuan restarts (Default On).",
   "settingAutoLockTimeoutTitle": "Idle Auto-Lock Timeout (mins)",

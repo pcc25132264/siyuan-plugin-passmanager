@@ -123,6 +123,39 @@
             const decoder = new TextDecoder();
             return decoder.decode(decrypted);
         }
+
+        // 生成并返回一个随机的设备密钥（用于加密本地保存的主密码，避免明文落盘）
+        createDeviceKey() {
+            const key = crypto.getRandomValues(new Uint8Array(32));
+            return this.buf2hex(key);
+        }
+
+        async encryptTextWithDeviceKey(deviceKeyHex, text) {
+            const rawKey = this.hex2buf(deviceKeyHex);
+            const key = await crypto.subtle.importKey(
+                'raw', rawKey, 'AES-GCM', false, ['encrypt', 'decrypt']
+            );
+            const iv = crypto.getRandomValues(new Uint8Array(12));
+            const encoder = new TextEncoder();
+            const encrypted = await crypto.subtle.encrypt(
+                { name: 'AES-GCM', iv: iv }, key, encoder.encode(text)
+            );
+            return { iv: this.buf2hex(iv), data: this.buf2hex(encrypted) };
+        }
+
+        async decryptTextWithDeviceKey(deviceKeyHex, encryptedObj) {
+            const rawKey = this.hex2buf(deviceKeyHex);
+            const key = await crypto.subtle.importKey(
+                'raw', rawKey, 'AES-GCM', false, ['encrypt', 'decrypt']
+            );
+            const decrypted = await crypto.subtle.decrypt(
+                { name: 'AES-GCM', iv: this.hex2buf(encryptedObj.iv) },
+                key,
+                this.hex2buf(encryptedObj.data)
+            );
+            const decoder = new TextDecoder();
+            return decoder.decode(decrypted);
+        }
         
         lock() {
             this.key = null;
@@ -411,12 +444,63 @@
             this.salt = null;
             this.locked = true;
             this.autoLock = null;
+            this.deviceKey = null;
             this.pluginConfig = {
                 requireUnlock: true,
-                savedPassword: ''
+                savedPasswordEnc: null
             };
             this.currentTab = 'passwords'; // 'passwords' or 'texts'
             this.cryptoBlockManager = new CryptoBlockManager(this);
+        }
+
+        // 获取（或生成）设备密钥，用于解密本地保存的主密码
+        async ensureDeviceKey() {
+            if (this.deviceKey) {
+                return this.deviceKey;
+            }
+            const keyData = await this.loadData('device-key.json');
+            if (keyData && keyData.key) {
+                this.deviceKey = keyData.key;
+                return this.deviceKey;
+            }
+            const newKey = this.crypto.createDeviceKey();
+            await this.saveData('device-key.json', { key: newKey });
+            this.deviceKey = newKey;
+            return this.deviceKey;
+        }
+
+        // 将主密码加密后保存，避免明文落盘；同时清除历史明文字段
+        async storeSavedPassword(pwd) {
+            const deviceKey = await this.ensureDeviceKey();
+            this.pluginConfig.savedPasswordEnc = await this.crypto.encryptTextWithDeviceKey(deviceKey, pwd);
+            delete this.pluginConfig.savedPassword;
+            await this.saveData('plugin-config.json', this.pluginConfig);
+        }
+
+        // 清除本地保存的主密码（requireUnlock 开启时调用）
+        clearSavedPassword() {
+            this.pluginConfig.savedPasswordEnc = null;
+            delete this.pluginConfig.savedPassword;
+        }
+
+        // 读取本地保存的主密码明文；若无或解密失败则返回空字符串
+        async getSavedPassword() {
+            if (this.pluginConfig.savedPassword) {
+                // 兼容旧版本：将历史明文密码迁移为加密存储
+                const legacy = this.pluginConfig.savedPassword;
+                await this.storeSavedPassword(legacy);
+                return legacy;
+            }
+            if (this.pluginConfig.savedPasswordEnc) {
+                const deviceKey = await this.ensureDeviceKey();
+                try {
+                    return await this.crypto.decryptTextWithDeviceKey(deviceKey, this.pluginConfig.savedPasswordEnc);
+                } catch (e) {
+                    console.error('Failed to decrypt saved password', e);
+                    return '';
+                }
+            }
+            return '';
         }
 
         async onload() {
@@ -513,7 +597,7 @@
         // Initialize default configuration
         this.pluginConfig = {
             requireUnlock: true,
-            savedPassword: '',
+            savedPasswordEnc: null,
             neverLock: true,
             autoLockTimeout: 5,
             lockOnBlur: false
@@ -544,13 +628,16 @@
             this.setupSettings();
             
             // Try auto-unlock if configured
-            if (!this.pluginConfig.requireUnlock && this.pluginConfig.savedPassword && this.salt) {
-                try {
-                    await this.crypto.deriveKey(this.pluginConfig.savedPassword, this.salt);
-                    await this.loadVault();
-                    this.refreshCryptoBlocks();
-                } catch (e) {
-                    console.error("Auto-unlock failed", e);
+            if (!this.pluginConfig.requireUnlock && this.salt) {
+                const savedPwd = await this.getSavedPassword();
+                if (savedPwd) {
+                    try {
+                        await this.crypto.deriveKey(savedPwd, this.salt);
+                        await this.loadVault();
+                        this.refreshCryptoBlocks();
+                    } catch (e) {
+                        console.error("Auto-unlock failed", e);
+                    }
                 }
             }
         }
@@ -561,7 +648,7 @@
                     await this.saveData('plugin-config.json', this.pluginConfig);
                     // If user toggled 'requireUnlock' to true, we must clear the saved password
                     if (this.pluginConfig.requireUnlock) {
-                        this.pluginConfig.savedPassword = '';
+                        this.clearSavedPassword();
                         await this.saveData('plugin-config.json', this.pluginConfig);
                     }
                 }
@@ -569,7 +656,7 @@
 
             this.setting.addItem({
                 title: this.i18n.settingRequireUnlockTitle || 'Always Require Unlock',
-                description: this.i18n.settingRequireUnlockDesc || 'If disabled, the master password will be saved in plaintext locally.',
+                description: this.i18n.settingRequireUnlockDesc || 'If disabled, the master password will be encrypted and saved locally for auto-lock.',
                 createActionElement: () => {
                     const checkbox = document.createElement('input');
                     checkbox.type = 'checkbox';
@@ -646,10 +733,16 @@
                     const algoText = this.i18n.algoName || 'Algorithm';
                     const saltText = this.i18n.saltValue || 'Salt';
                     const exampleText = this.i18n.decryptionExample || 'Node.js Decryption Example:';
+
+                    // 统一盐值显示格式：兼容历史遗留的逗号十进制格式，始终以 hex 展示（与示例代码一致）
+                    let saltHex = this.salt || '';
+                    if (saltHex && saltHex.includes(',')) {
+                        saltHex = this.crypto.buf2hex(new Uint8Array(saltHex.split(',').map(Number)));
+                    }
                     
                     div.innerHTML = `
                         <div><strong>${algoText}:</strong> AES-256-GCM / PBKDF2 (100000 iterations, SHA-256)</div>
-                        <div><strong>${saltText}:</strong> <span style="user-select: all; font-family: monospace;">${this.salt ? this.salt : 'Not Initialized'}</span></div>
+                        <div><strong>${saltText}:</strong> <span style="user-select: all; font-family: monospace;">${saltHex || 'Not Initialized'}</span></div>
                         <div style="margin-top: 8px; text-align: left; background: var(--b3-theme-surface-lighter); padding: 8px; border-radius: 4px; max-width: 500px; overflow-x: auto;">
                             <strong>${exampleText}</strong>
                             <pre style="margin: 4px 0 0 0; white-space: pre-wrap; font-family: monospace; font-size: 11px;">
@@ -657,7 +750,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 
 const password = 'your-master-password';
-const saltHex = '${this.salt || 'YOUR_SALT_HEX'}';
+const saltHex = '${saltHex || 'YOUR_SALT_HEX'}';
 const salt = Buffer.from(saltHex, 'hex');
 
 // Read vault-data.json
@@ -783,13 +876,18 @@ console.log(JSON.parse(decrypted));
 
         async openVault() {
             if (this.locked) {
-                if (!this.pluginConfig.requireUnlock && this.pluginConfig.savedPassword && this.salt) {
-                    try {
-                        await this.crypto.deriveKey(this.pluginConfig.savedPassword, this.salt);
-                        await this.loadVault();
-                        this.openMainTab();
-                    } catch (e) {
-                        siyuan.showMessage(this.i18n.unlockFailed, 3000, 'error');
+                if (!this.pluginConfig.requireUnlock && this.salt) {
+                    const savedPwd = await this.getSavedPassword();
+                    if (savedPwd) {
+                        try {
+                            await this.crypto.deriveKey(savedPwd, this.salt);
+                            await this.loadVault();
+                            this.openMainTab();
+                        } catch (e) {
+                            siyuan.showMessage(this.i18n.unlockFailed, 3000, 'error');
+                            this.openMainTab();
+                        }
+                    } else {
                         this.openMainTab();
                     }
                 } else {
@@ -971,8 +1069,7 @@ console.log(JSON.parse(decrypted));
                     await this.saveVault(); // re-save vault with new key
 
                     if (!this.pluginConfig.requireUnlock) {
-                        this.pluginConfig.savedPassword = newPwd;
-                        await this.saveData('plugin-config.json', this.pluginConfig);
+                        await this.storeSavedPassword(newPwd);
                     }
 
                     siyuan.showMessage(this.i18n.passwordChangeSuccess || 'Success');
@@ -1155,8 +1252,7 @@ console.log(JSON.parse(decrypted));
                     await this.saveData('vault-config.json', configData);
                     
                     if (!this.pluginConfig.requireUnlock) {
-                        this.pluginConfig.savedPassword = pwd;
-                        await this.saveData('plugin-config.json', this.pluginConfig);
+                        await this.storeSavedPassword(pwd);
                     }
                     
                     this.locked = false;
@@ -1180,8 +1276,7 @@ console.log(JSON.parse(decrypted));
                         await this.loadVault();
                         
                         if (!this.pluginConfig.requireUnlock) {
-                            this.pluginConfig.savedPassword = pwd;
-                            await this.saveData('plugin-config.json', this.pluginConfig);
+                            await this.storeSavedPassword(pwd);
                         }
                         
                         this.renderTabContent();
