@@ -4,7 +4,7 @@
         : typeof define === 'function' && define.amd
             ? define(['siyuan'], factory)
             : (global = typeof globalThis !== 'undefined' ? globalThis : global || self,
-               global.PassManagerPlugin = factory(global.siyuan));
+                global.PassManagerPlugin = factory(global.siyuan));
 }(this, function (siyuan) {
     'use strict';
 
@@ -31,7 +31,7 @@
                 false,
                 ['deriveKey']
             );
-            
+
             let salt;
             if (saltStr) {
                 if (saltStr.includes(',')) {
@@ -42,7 +42,7 @@
             } else {
                 salt = crypto.getRandomValues(new Uint8Array(16));
             }
-            
+
             this.key = await crypto.subtle.deriveKey(
                 {
                     name: 'PBKDF2',
@@ -75,7 +75,7 @@
 
         async decrypt(encryptedData, ivStr) {
             if (!this.key) throw new Error('Not initialized');
-            
+
             let iv, data;
             if (ivStr && ivStr.includes(',')) {
                 iv = new Uint8Array(ivStr.split(',').map(Number));
@@ -156,11 +156,11 @@
             const decoder = new TextDecoder();
             return decoder.decode(decrypted);
         }
-        
+
         lock() {
             this.key = null;
         }
-        
+
         isLocked() {
             return this.key === null;
         }
@@ -172,11 +172,11 @@
             if (useUpper) charset += 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
             if (useNumbers) charset += '0123456789';
             if (useSymbols) charset += '!@#$%^&*()_+~`|}{[]:;?><,./-=';
-            
+
             let password = '';
             const randomValues = new Uint32Array(length);
             crypto.getRandomValues(randomValues);
-            
+
             for (let i = 0; i < length; i++) {
                 password += charset[randomValues[i] % charset.length];
             }
@@ -194,12 +194,12 @@
 
         start() {
             this.stop(); // Remove any existing listeners and timer
-            
+
             const config = this.plugin.pluginConfig || {};
             const neverLock = config.neverLock !== false; // default true
-            
+
             if (neverLock) return; // Do not start lock mechanisms
-            
+
             this.timeout = (config.autoLockTimeout || 5) * 60 * 1000;
             this.lockOnBlur = config.lockOnBlur || false;
 
@@ -235,17 +235,17 @@
         constructor(plugin) {
             this.plugin = plugin;
             this.processedBlocks = new WeakSet();
-            
+
             this.plugin.eventBus.on("loaded-protyle-static", this.handleProtyleLoad.bind(this));
             this.plugin.eventBus.on("loaded-protyle-dynamic", this.handleProtyleLoad.bind(this));
             this.plugin.eventBus.on("ws-main", this.handleWsMain.bind(this));
         }
-        
+
         handleProtyleLoad({ detail }) {
             const blocks = detail.protyle.element.querySelectorAll('[data-type="NodeCodeBlock"]');
             blocks.forEach(b => this.processBlock(b));
         }
-        
+
         handleWsMain({ detail }) {
             if (detail.cmd === "transactions") {
                 requestAnimationFrame(() => {
@@ -259,27 +259,27 @@
                 });
             }
         }
-        
+
         async processBlock(blockElement) {
             const langDiv = blockElement.querySelector('.protyle-action__language');
             if (!langDiv || langDiv.textContent.trim().toLowerCase() !== 'crypto') return;
-            
+
             if (this.processedBlocks.has(blockElement)) return;
             this.processedBlocks.add(blockElement);
             blockElement.dataset.cryptoProcessed = "true";
-            
+
             this.renderBlock(blockElement);
         }
-        
+
         async renderBlock(blockElement) {
             const actionDiv = blockElement.querySelector('.protyle-action');
             const contentDiv = blockElement.querySelector('.protyle-content') || blockElement.querySelector('[contenteditable="true"]');
             if (!actionDiv && !contentDiv) return;
-            
+
             // Remove existing overlay if any
             let overlay = blockElement.querySelector('.pm-crypto-overlay');
             if (overlay) overlay.remove();
-            
+
             overlay = document.createElement('div');
             overlay.className = 'pm-crypto-overlay';
             overlay.contentEditable = "false";
@@ -292,7 +292,7 @@
             overlay.style.cursor = 'pointer';
             overlay.style.transition = 'all 0.2s ease';
             overlay.style.boxShadow = '0 1px 3px rgba(0,0,0,0.02)';
-            
+
             overlay.addEventListener('mouseenter', () => {
                 overlay.style.borderColor = 'var(--b3-theme-primary)';
                 overlay.style.boxShadow = '0 2px 6px rgba(0,0,0,0.05)';
@@ -301,7 +301,7 @@
                 overlay.style.borderColor = 'var(--b3-theme-primary-lighter)';
                 overlay.style.boxShadow = '0 1px 3px rgba(0,0,0,0.02)';
             });
-            
+
             if (this.plugin.locked) {
                 overlay.innerHTML = `<div style="display: flex; align-items: center; gap: 8px; justify-content: center; color: var(--b3-theme-on-surface-light); padding: 8px 0;">
                     <svg style="width: 18px; height: 18px;"><use xlink:href="#iconLock"></use></svg>
@@ -315,7 +315,7 @@
                     let textDiv = blockElement.querySelector('[contenteditable="true"]');
                     let rawText = textDiv ? textDiv.textContent : '';
                     rawText = rawText.replace(/\u200B/g, '').trim();
-                    
+
                     if (!rawText) {
                         overlay.innerHTML = `<div style="color: var(--b3-theme-on-surface-light); display: flex; align-items: center; gap: 6px;">
                             <svg style="width: 14px; height: 14px;"><use xlink:href="#iconLock"></use></svg>
@@ -328,13 +328,13 @@
                         safeDiv.style.whiteSpace = 'pre-wrap';
                         safeDiv.style.wordBreak = 'break-word';
                         safeDiv.style.lineHeight = '1.6';
-                        
+
                         let displayText = decrypted.content || decrypted;
                         // Strip Siyuan Block IAL attributes like {: id="xxx" updated="xxx"}
                         displayText = displayText.replace(/(?:\n\s*)?\{:[^}]+\}\s*$/, '');
-                        
+
                         safeDiv.textContent = displayText;
-                        
+
                         const headerDiv = document.createElement('div');
                         headerDiv.style.display = 'flex';
                         headerDiv.style.alignItems = 'center';
@@ -346,11 +346,11 @@
                         headerDiv.style.fontSize = '12px';
                         headerDiv.style.fontWeight = 'bold';
                         headerDiv.innerHTML = `<svg style="width: 14px; height: 14px;"><use xlink:href="#iconUnlock"></use></svg><span>${this.plugin.i18n.decryptedContent || '解密内容'}</span>`;
-                        
+
                         const container = document.createElement('div');
                         container.appendChild(headerDiv);
                         container.appendChild(safeDiv);
-                        
+
                         overlay.appendChild(container);
                     }
                 } catch (e) {
@@ -360,27 +360,27 @@
                         解密失败。密码不正确或数据已损坏。
                     </div>`;
                 }
-                
+
                 overlay.addEventListener('click', (e) => {
                     e.stopPropagation();
                     this.openEditDialog(blockElement);
                 });
             }
-            
+
             blockElement.appendChild(overlay);
         }
-        
+
         async openEditDialog(blockElement) {
             if (this.plugin.locked) {
                 siyuan.showMessage(this.plugin.i18n.vaultLockedPlaceholder || "Vault locked", 3000, "error");
                 this.plugin.openVault();
                 return;
             }
-            
+
             const textDiv = blockElement.querySelector('[contenteditable="true"]');
             let rawText = textDiv ? textDiv.textContent : '';
             rawText = rawText.replace(/\u200B/g, '').trim();
-            
+
             let currentText = '';
             if (rawText) {
                 try {
@@ -389,9 +389,9 @@
                     currentText = decrypted.content || decrypted;
                     // Strip Siyuan Block IAL attributes for editing
                     currentText = currentText.replace(/(?:\n\s*)?\{:[^}]+\}\s*$/, '');
-                } catch(e) {}
+                } catch (e) { }
             }
-            
+
             const dialog = new siyuan.Dialog({
                 title: this.plugin.i18n.editEntry || 'Edit Encrypted Block',
                 content: `
@@ -406,27 +406,29 @@
                 width: '600px',
                 height: '400px'
             });
-            
+
             const textarea = dialog.element.querySelector('#pm-crypto-textarea');
             textarea.value = currentText;
-            
+
             dialog.element.querySelector('#pm-crypto-cancel').addEventListener('click', () => dialog.destroy());
-            
+
             dialog.element.querySelector('#pm-crypto-save').addEventListener('click', async () => {
                 const newText = textarea.value;
                 try {
                     const encrypted = await this.plugin.crypto.encrypt({ content: newText });
                     const jsonStr = JSON.stringify(encrypted);
-                    
+
                     const id = blockElement.getAttribute('data-node-id');
                     const markdown = "```crypto\n" + jsonStr + "\n```";
-                    
+
                     await siyuan.fetchSyncPost('/api/block/updateBlock', {
                         dataType: "markdown",
                         data: markdown,
                         id: id
                     });
-                    
+                    // 保存新建/编辑的加密块后记录其 ID
+                    await this.plugin.addCryptoBlockId(id);
+
                     dialog.destroy();
                 } catch (e) {
                     console.error(e);
@@ -515,16 +517,16 @@
                     protyle.insert("```crypto\n\n```");
                 }
             }];
-            
+
             this.eventBus.on("click-blockicon", ({ detail }) => {
                 const blockElements = detail.blockElements;
                 if (!blockElements || blockElements.length === 0) return;
-                
+
                 const blockElement = blockElements[0];
                 const type = blockElement.getAttribute("data-type");
-                const isCrypto = blockElement.dataset.cryptoProcessed === "true" || 
-                                 (type === "NodeCodeBlock" && blockElement.querySelector('.protyle-action__language')?.textContent === 'crypto');
-                
+                const isCrypto = blockElement.dataset.cryptoProcessed === "true" ||
+                    (type === "NodeCodeBlock" && blockElement.querySelector('.protyle-action__language')?.textContent === 'crypto');
+
                 if (isCrypto) {
                     detail.menu.addItem({
                         icon: "iconUnlock",
@@ -592,20 +594,20 @@
             });
 
             // Load config
-        const pluginConfig = await this.loadData('plugin-config.json');
-        
-        // Initialize default configuration
-        this.pluginConfig = {
-            requireUnlock: true,
-            savedPasswordEnc: null,
-            neverLock: true,
-            autoLockTimeout: 5,
-            lockOnBlur: false
-        };
-        
-        if (pluginConfig) {
-            this.pluginConfig = { ...this.pluginConfig, ...pluginConfig };
-        }
+            const pluginConfig = await this.loadData('plugin-config.json');
+
+            // Initialize default configuration
+            this.pluginConfig = {
+                requireUnlock: true,
+                savedPasswordEnc: null,
+                neverLock: true,
+                autoLockTimeout: 5,
+                lockOnBlur: false
+            };
+
+            if (pluginConfig) {
+                this.pluginConfig = { ...this.pluginConfig, ...pluginConfig };
+            }
 
             // Load salt and recovery data if exists
             const config = await this.loadData('vault-config.json');
@@ -615,7 +617,7 @@
             if (config && config.recoveryData) {
                 this.recoveryData = config.recoveryData;
             }
-            
+
             this.addCommand({
                 langKey: 'openVault',
                 langText: this.i18n.pluginName || 'Password Manager',
@@ -626,7 +628,7 @@
             });
 
             this.setupSettings();
-            
+
             // Try auto-unlock if configured
             if (!this.pluginConfig.requireUnlock && this.salt) {
                 const savedPwd = await this.getSavedPassword();
@@ -739,7 +741,7 @@
                     if (saltHex && saltHex.includes(',')) {
                         saltHex = this.crypto.buf2hex(new Uint8Array(saltHex.split(',').map(Number)));
                     }
-                    
+
                     div.innerHTML = `
                         <div><strong>${algoText}:</strong> AES-256-GCM / PBKDF2 (100000 iterations, SHA-256)</div>
                         <div><strong>${saltText}:</strong> <span style="user-select: all; font-family: monospace;">${saltHex || 'Not Initialized'}</span></div>
@@ -815,7 +817,7 @@ console.log(JSON.parse(decrypted));
         openPreferredEntry() {
             this.openVault();
         }
-        
+
         async encryptBlock(blockElement) {
             if (this.locked) {
                 siyuan.showMessage(this.i18n.vaultLockedPlaceholder || "Vault locked", 3000, "error");
@@ -823,30 +825,32 @@ console.log(JSON.parse(decrypted));
                 return;
             }
             const id = blockElement.getAttribute("data-node-id");
-            
+
             const res = await siyuan.fetchSyncPost('/api/block/getBlockKramdown', { id });
             if (res.code !== 0) {
                 siyuan.showMessage("Failed to get block data", 3000, "error");
                 return;
             }
             const kramdown = res.data.kramdown;
-            
+
             try {
                 const encrypted = await this.crypto.encrypt({ content: kramdown });
                 const jsonStr = JSON.stringify(encrypted);
                 const markdown = "```crypto\n" + jsonStr + "\n```";
-                
+
                 await siyuan.fetchSyncPost('/api/block/updateBlock', {
                     dataType: "markdown",
                     data: markdown,
                     id: id
                 });
-            } catch(e) {
+                // 记录加密块 ID，供改密时同步重加密
+                await this.addCryptoBlockId(id);
+            } catch (e) {
                 console.error(e);
                 siyuan.showMessage("Encryption failed", 3000, "error");
             }
         }
-        
+
         async decryptBlock(blockElement) {
             if (this.locked) {
                 siyuan.showMessage(this.i18n.vaultLockedPlaceholder || "Vault locked", 3000, "error");
@@ -857,18 +861,20 @@ console.log(JSON.parse(decrypted));
             const textDiv = blockElement.querySelector('[contenteditable="true"]');
             let rawText = textDiv ? textDiv.textContent : '';
             rawText = rawText.replace(/\u200B/g, '').trim();
-            
+
             try {
                 const parsed = JSON.parse(rawText);
                 const decrypted = await this.crypto.decrypt(parsed.data, parsed.iv);
                 const kramdown = decrypted.content || decrypted;
-                
+
                 await siyuan.fetchSyncPost('/api/block/updateBlock', {
                     dataType: "markdown",
                     data: kramdown,
                     id: id
                 });
-            } catch(e) {
+                // 已解密还原为普通块，从加密块索引中移除
+                await this.removeCryptoBlockId(id);
+            } catch (e) {
                 console.error(e);
                 siyuan.showMessage("Decryption failed", 3000, "error");
             }
@@ -1011,11 +1017,191 @@ console.log(JSON.parse(decrypted));
             }
         }
 
+        // ---------- 加密块 ID 索引，用于改密时按块 ID 同步重加密 ----------
+        async loadCryptoBlockIndex() {
+            try {
+                const d = await this.loadData('crypto-index.json');
+                if (Array.isArray(d)) return d;
+                if (d && Array.isArray(d.ids)) return d.ids;
+            } catch (e) {
+                console.error('加载加密块索引失败', e);
+            }
+            return [];
+        }
+
+        async saveCryptoBlockIndex(ids) {
+            await this.saveData('crypto-index.json', { ids: ids || [] });
+        }
+
+        async addCryptoBlockId(id) {
+            if (!id) return;
+            const ids = await this.loadCryptoBlockIndex();
+            if (ids.includes(id)) return;
+            ids.push(id);
+            await this.saveCryptoBlockIndex(ids);
+        }
+
+        async removeCryptoBlockId(id) {
+            if (!id) return;
+            const ids = await this.loadCryptoBlockIndex();
+            if (!ids.includes(id)) return;
+            await this.saveCryptoBlockIndex(ids.filter(x => x !== id));
+        }
+
+        // 合并索引与遍历结果，去重后得到当前所有加密块的 { id, data, iv }
+        async collectCryptoBlocksByIndex() {
+            const map = new Map();
+            try {
+                const walk = await this.collectCryptoBlocksByWalking();
+                for (const b of walk) map.set(b.id, { data: b.data, iv: b.iv });
+            } catch (e) {
+                console.error('遍历收集加密块失败', e);
+            }
+            const index = await this.loadCryptoBlockIndex();
+            for (const id of index) {
+                if (map.has(id)) continue;
+                try {
+                    const kr = await siyuan.fetchSyncPost('/api/block/getBlockKramdown', { id });
+                    if (kr.code === 0 && kr.data && kr.data.kramdown) {
+                        const found = [];
+                        this.extractCryptoBlocks(kr.data.kramdown, found);
+                        for (const fb of found) map.set(fb.id, { data: fb.data, iv: fb.iv });
+                    }
+                } catch (e) { }
+            }
+            return Array.from(map.entries()).map(([id, o]) => ({ id, data: o.data, iv: o.iv }));
+        }
+
+        async updateBlockIndexFromCount(list) {
+            await this.saveCryptoBlockIndex(list.map(b => b.id));
+        }
+
+        // 改密时收集所有加密块并用旧密钥（testCrypto）解密。
+        // 返回 { list: [{id, obj}], failedCount }，failedCount>0 时调用方应中止改密。
+        async gatherCryptoBlocksForChange(testCrypto) {
+            let list = [];
+            let failedCount = 0;
+            try {
+                const found = await this.collectCryptoBlocksByIndex();
+                for (const blk of found) {
+                    try {
+                        const decrypted = await testCrypto.decrypt(blk.data, blk.iv);
+                        list.push({ id: blk.id, obj: decrypted });
+                    } catch (e) {
+                        failedCount++;
+                        console.error('旧密钥无法解密加密块，跳过:', blk.id, e);
+                    }
+                }
+            } catch (e) {
+                console.error('收集加密块失败', e);
+            }
+            return { list, failedCount };
+        }
+
+        // ---------- 更新加密块时的全屏进度覆盖层，保证改密过程不可被打断 ----------
+        startUpdateOverlay(total) {
+            this.dismissUpdateOverlay();
+            const ov = document.createElement('div');
+            ov.id = 'pm-crypto-updating-overlay';
+            ov.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;z-index:2147483000;background:rgba(0,0,0,.4);display:flex;align-items:center;justify-content:center;';
+            ov.innerHTML = `<div style="background:var(--b3-theme-background);padding:28px 36px;border-radius:8px;box-shadow:0 2px 12px rgba(0,0,0,.12);text-align:center;min-width:260px;color:var(--b3-theme-on-background)">
+                <div style="font-size:14px;margin-bottom:12px">${this.i18n.updatingEncryptedBlocks || '正在重新加密加密块，请勿关闭...'}</div>
+                <div style="font-size:20px;font-weight:600" id="pm-crypto-updating-progress">0/${total || 0}</div>
+            </div>`;
+            document.body.appendChild(ov);
+            this.updateOverlay = ov;
+            this.updateTotal = total || 0;
+        }
+
+        updateOverlayProgress(done) {
+            const p = this.updateOverlay && this.updateOverlay.querySelector('#pm-crypto-updating-progress');
+            if (p) p.textContent = `${done}/${this.updateTotal}`;
+        }
+
+        dismissUpdateOverlay() {
+            if (this.updateOverlay) {
+                this.updateOverlay.remove();
+                this.updateOverlay = null;
+            }
+        }
+
+        // 遍历工作台所有文档，收集所有 crypto 代码块（返回 { id, data, iv }[]），不使用 SQL
+        async collectCryptoBlocksByWalking() {
+            const result = [];
+            let notebooks = [];
+            try {
+                const res = await siyuan.fetchSyncPost('/api/notebook/lsNotebooks', {});
+                notebooks = (res.data && res.data.notebooks) || [];
+            } catch (e) {
+                console.error('列出笔记本失败', e);
+            }
+
+            const seen = new Set();
+            const scanBox = async (notebook, path) => {
+                const key = notebook + path;
+                if (seen.has(key)) return;
+                seen.add(key);
+                let files = [];
+                try {
+                    const res = await siyuan.fetchSyncPost('/api/filetree/listDocsByPath', {
+                        notebook: notebook,
+                        path: path,
+                        maxListCount: 0, // 0 表示不限制数量
+                        ignoreMaxListHint: true
+                    });
+                    files = (res.data && res.data.files) || [];
+                } catch (e) {
+                    console.error('列出文档失败:', notebook, path, e);
+                    return;
+                }
+                for (const f of files) {
+                    if (f.id) {
+                        try {
+                            const kr = await siyuan.fetchSyncPost('/api/block/getBlockKramdown', { id: f.id });
+                            if (kr.code === 0 && kr.data && kr.data.kramdown) {
+                                this.extractCryptoBlocks(kr.data.kramdown, result);
+                            }
+                        } catch (e) {
+                            console.error('读取文档失败:', f.id, e);
+                        }
+                    }
+                    if ((f.subFileCount || 0) > 0) {
+                        await scanBox(notebook, '/' + f.id);
+                    }
+                }
+            };
+
+            for (const nb of notebooks) {
+                if (nb.closed) continue; // 已关闭的笔记本无法通过 API 遍历，跳过
+                await scanBox(nb.id, '/');
+            }
+            return result;
+        }
+
+        // 从文档 kramdown 中提取 crypto 代码块及其块 ID
+        extractCryptoBlocks(kramdown, result) {
+            if (!kramdown) return;
+            const fenceRe = /```crypto[^\n]*\n([\s\S]*?)```\s*\n\s*\{:\s*id="([^"]+)"/g;
+            let fm;
+            while ((fm = fenceRe.exec(kramdown)) !== null) {
+                const raw = (fm[1] || '').replace(/\u200B/g, '').trim();
+                if (!raw) continue;
+                try {
+                    const parsed = JSON.parse(raw);
+                    if (parsed && parsed.iv && parsed.data) {
+                        result.push({ id: fm[2], data: parsed.data, iv: parsed.iv });
+                    }
+                } catch (e) { }
+            }
+        }
+
         showChangePasswordDialog() {
             const dialog = new siyuan.Dialog({
                 title: this.i18n.changePassword || 'Change Master Password',
                 content: `
                     <div class="passmanager-dialog-form" style="padding: 16px;">
+                        <div style="font-size: 13px; color: var(--b3-theme-on-surface); margin-bottom: 8px;">${this.i18n.cryptoBlockCount || '加密块数量'}：<span id="pm-crypto-count" style="font-weight:600;">...</span></div>
+                        <div style="font-size: 12px; color: var(--b3-theme-on-surface-light); margin-bottom: 8px;">${this.i18n.cryptoScanHint || '扫描时会忽略磁盘中已缺失的文档引用，不影响修改主密码。'}</div>
                         <input type="password" class="passmanager-input b3-text-field" id="pm-old-pwd" placeholder="${this.i18n.oldPassword || 'Old Password'}">
                         <input type="password" class="passmanager-input b3-text-field" id="pm-new-pwd" placeholder="${this.i18n.newPassword || 'New Password'}">
                         <input type="password" class="passmanager-input b3-text-field" id="pm-new-pwd-confirm" placeholder="${this.i18n.confirmNewPassword || 'Confirm New Password'}">
@@ -1028,6 +1214,14 @@ console.log(JSON.parse(decrypted));
                 `,
                 width: '400px'
             });
+
+            // 打开时统计当前加密块数量
+            const countLabel = dialog.element.querySelector('#pm-crypto-count');
+            if (countLabel) {
+                this.collectCryptoBlocksByIndex().then(list => {
+                    countLabel.textContent = (list || []).length;
+                }).catch(() => { countLabel.textContent = '0'; });
+            }
 
             dialog.element.querySelector('#pm-change-pwd-btn').addEventListener('click', async () => {
                 const oldPwd = dialog.element.querySelector('#pm-old-pwd').value;
@@ -1042,6 +1236,9 @@ console.log(JSON.parse(decrypted));
                     return;
                 }
 
+                const okBtn = dialog.element.querySelector('#pm-change-pwd-btn');
+                okBtn.disabled = true;
+
                 try {
                     // verify old password
                     const testCrypto = new CryptoManager();
@@ -1050,11 +1247,63 @@ console.log(JSON.parse(decrypted));
                     if (testConfig && testConfig.data) {
                         await testCrypto.decrypt(testConfig.data, testConfig.iv);
                     }
-                    
-                    // it worked, now re-encrypt with new password
-                    this.salt = await this.crypto.deriveKey(newPwd);
+
+                    // 通过索引 + 遍历去重收集所有加密块，用旧密钥解密出来
+                    const gathered = await this.gatherCryptoBlocksForChange(testCrypto);
+                    const cryptoBlocks = gathered.list;
+                    const failedCount = gathered.failedCount;
+
+                    // 只要存在无法用旧密码解开的加密块，就中止改密，避免"只换盐、块未重加密"导致全库损坏
+                    if (failedCount > 0) {
+                        okBtn.disabled = false;
+                        siyuan.showMessage(
+                            (this.i18n.changePasswordAborted || '有') + failedCount +
+                            (this.i18n.changePasswordAbortedSuffix || ' 个加密块无法用旧密码解密，已中止改密，请先处理损坏块。'),
+                            7000, 'error'
+                        );
+                        return;
+                    }
+
+                    // 更新期间禁止关闭，防止被打断
+                    const closeBtn = dialog.element.querySelector('.b3-dialog__close');
+                    if (closeBtn) closeBtn.remove();
+
+                    // 全屏进度覆盖层，改密期间不可被打断
+                    this.startUpdateOverlay(cryptoBlocks.length);
+
+                    // 用新密码派生新密钥（先不切换 this.crypto，确保全部块更新成功后再提交）
+                    const newCrypto = new CryptoManager();
+                    let newSalt;
+                    try {
+                        newSalt = await newCrypto.deriveKey(newPwd);
+                    } catch (e) {
+                        this.dismissUpdateOverlay();
+                        throw e;
+                    }
+
+                    // 用新密钥重新加密加密块，直到全部完成
+                    let done = 0;
+                    for (const blk of cryptoBlocks) {
+                        try {
+                            const enc = await newCrypto.encrypt(blk.obj);
+                            const markdown = "```crypto\n" + JSON.stringify(enc) + "\n```";
+                            await siyuan.fetchSyncPost('/api/block/updateBlock', {
+                                dataType: "markdown",
+                                data: markdown,
+                                id: blk.id
+                            });
+                            done++;
+                        } catch (e) {
+                            console.error('重新加密加密块失败:', blk.id, e);
+                        }
+                        this.updateOverlayProgress(done);
+                    }
+
+                    // 全部加密块更新完成后，才提交新密钥
+                    this.crypto.key = newCrypto.key;
+                    this.salt = newSalt;
                     const configData = { salt: this.salt };
-                    
+
                     if (siyuanPwd) {
                         try {
                             const recoveryData = await this.crypto.encryptTextWithPassword(newPwd, siyuanPwd, this.salt);
@@ -1068,13 +1317,20 @@ console.log(JSON.parse(decrypted));
                     await this.saveData('vault-config.json', configData);
                     await this.saveVault(); // re-save vault with new key
 
+                    // 同步更新加密块索引
+                    await this.saveCryptoBlockIndex(cryptoBlocks.map(b => b.id));
+                    this.refreshCryptoBlocks();
+
                     if (!this.pluginConfig.requireUnlock) {
                         await this.storeSavedPassword(newPwd);
                     }
 
+                    this.dismissUpdateOverlay();
+                    try { dialog.destroy(); } catch (e) { }
                     siyuan.showMessage(this.i18n.passwordChangeSuccess || 'Success');
-                    dialog.destroy();
                 } catch (e) {
+                    this.dismissUpdateOverlay();
+                    okBtn.disabled = false;
                     siyuan.showMessage(this.i18n.passwordChangeFailed || 'Old password incorrect', 3000, 'error');
                 }
             });
@@ -1108,25 +1364,25 @@ console.log(JSON.parse(decrypted));
                         this.vaultData.categories.push(defCat);
                     }
                 });
-                
+
                 // Data migration for legacy 'group' field to 'categoryId'
                 const groups = new Set(this.vaultData.entries.map(e => e.group).filter(Boolean));
                 groups.forEach(g => {
                     // Skip if it matches one of our defaults
                     const isDefault = [
-                        this.i18n.defaultCatWork, this.i18n.defaultCatFinance, 
-                        this.i18n.defaultCatSocial, this.i18n.defaultCatLife, 
+                        this.i18n.defaultCatWork, this.i18n.defaultCatFinance,
+                        this.i18n.defaultCatSocial, this.i18n.defaultCatLife,
                         this.i18n.defaultCatOther, this.i18n.defaultGroup
                     ].includes(g);
-                    
+
                     if (!isDefault) {
                         const existingCat = this.vaultData.categories.find(c => c.name === g);
                         if (!existingCat) {
-                            this.vaultData.categories.push({ id: 'cat_' + Date.now() + '_' + Math.floor(Math.random()*1000), name: g });
+                            this.vaultData.categories.push({ id: 'cat_' + Date.now() + '_' + Math.floor(Math.random() * 1000), name: g });
                         }
                     }
                 });
-                
+
                 this.vaultData.entries.forEach(e => {
                     if (e.group) {
                         const cat = this.vaultData.categories.find(c => c.name === e.group);
@@ -1142,7 +1398,7 @@ console.log(JSON.parse(decrypted));
                 }
 
                 this.locked = false;
-                
+
                 if (!this.autoLock) {
                     this.autoLock = new AutoLockManager(this);
                 }
@@ -1155,7 +1411,7 @@ console.log(JSON.parse(decrypted));
 
         renderTabContent() {
             if (!this.tabElement) return;
-            
+
             if (this.locked) {
                 this.renderUnlockUI();
             } else {
@@ -1227,7 +1483,7 @@ console.log(JSON.parse(decrypted));
             btn.addEventListener('click', async () => {
                 const pwd = this.tabElement.querySelector('#pm-master-pwd').value;
                 if (!pwd) return;
-                
+
                 if (isSetup) {
                     const confirmPwd = this.tabElement.querySelector('#pm-master-pwd-confirm').value;
                     const siyuanPwd = this.tabElement.querySelector('#pm-siyuan-pwd').value;
@@ -1236,9 +1492,9 @@ console.log(JSON.parse(decrypted));
                         return;
                     }
                     this.salt = await this.crypto.deriveKey(pwd);
-                    
+
                     const configData = { salt: this.salt };
-                    
+
                     if (siyuanPwd) {
                         try {
                             const recoveryData = await this.crypto.encryptTextWithPassword(pwd, siyuanPwd, this.salt);
@@ -1250,14 +1506,14 @@ console.log(JSON.parse(decrypted));
                     }
 
                     await this.saveData('vault-config.json', configData);
-                    
+
                     if (!this.pluginConfig.requireUnlock) {
                         await this.storeSavedPassword(pwd);
                     }
-                    
+
                     this.locked = false;
-                    this.vaultData = { 
-                        entries: [], 
+                    this.vaultData = {
+                        entries: [],
                         categories: [
                             { id: 'default_work', name: this.i18n.defaultCatWork || 'Work' },
                             { id: 'default_finance', name: this.i18n.defaultCatFinance || 'Finance' },
@@ -1265,7 +1521,7 @@ console.log(JSON.parse(decrypted));
                             { id: 'default_life', name: this.i18n.defaultCatLife || 'Life' },
                             { id: 'default', name: this.i18n.defaultCatOther || 'Uncategorized' }
                         ],
-                        encryptedTexts: [] 
+                        encryptedTexts: []
                     };
                     await this.saveVault();
                     this.renderTabContent();
@@ -1274,11 +1530,11 @@ console.log(JSON.parse(decrypted));
                     try {
                         await this.crypto.deriveKey(pwd, this.salt);
                         await this.loadVault();
-                        
+
                         if (!this.pluginConfig.requireUnlock) {
                             await this.storeSavedPassword(pwd);
                         }
-                        
+
                         this.renderTabContent();
                         this.refreshCryptoBlocks();
                     } catch (e) {
@@ -1286,7 +1542,7 @@ console.log(JSON.parse(decrypted));
                     }
                 }
             });
-            
+
             // Add enter key listener for password input
             this.tabElement.querySelector('#pm-master-pwd').addEventListener('keypress', (e) => {
                 if (e.key === 'Enter') {
@@ -1296,7 +1552,7 @@ console.log(JSON.parse(decrypted));
         }
 
         renderMainUI() {
-            const categoryOptions = `<option value="">${this.i18n.allCategories || 'All Categories'}</option>` + 
+            const categoryOptions = `<option value="">${this.i18n.allCategories || 'All Categories'}</option>` +
                 this.vaultData.categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
 
             this.tabElement.innerHTML = `
@@ -1379,7 +1635,7 @@ console.log(JSON.parse(decrypted));
                             b.classList.add('b3-button--outline');
                         }
                     });
-                    
+
                     if (tab === 'passwords') {
                         this.tabElement.querySelector('#pm-table-passwords').style.display = 'table';
                         this.tabElement.querySelector('#pm-table-texts').style.display = 'none';
@@ -1387,7 +1643,7 @@ console.log(JSON.parse(decrypted));
                         this.tabElement.querySelector('#pm-table-passwords').style.display = 'none';
                         this.tabElement.querySelector('#pm-table-texts').style.display = 'table';
                     }
-                    
+
                     this.renderList();
                 });
             });
@@ -1422,15 +1678,15 @@ console.log(JSON.parse(decrypted));
                 this.lockVault();
                 siyuan.showMessage(this.i18n.vaultLocked);
             });
-            
+
             const exportJsonBtn = this.tabElement.querySelector('#pm-export-json-btn');
             if (exportJsonBtn) {
                 exportJsonBtn.addEventListener('click', () => this.exportToJson());
             }
-            
+
             const exportNoteUnencryptedBtn = this.tabElement.querySelector('#pm-export-note-unencrypted-btn');
             exportNoteUnencryptedBtn.addEventListener('click', () => this.exportToNote(false));
-            
+
             const exportNoteEncryptedBtn = this.tabElement.querySelector('#pm-export-note-encrypted-btn');
             exportNoteEncryptedBtn.addEventListener('click', () => this.exportToNote(true));
 
@@ -1467,7 +1723,7 @@ console.log(JSON.parse(decrypted));
         renderPasswordsList(query, catId) {
             const listEl = this.tabElement.querySelector('#pm-list');
             const sortIcon = this.tabElement.querySelector('#pm-sort-icon');
-            
+
             if (sortIcon) {
                 if (this.usernameSortOrder === 'asc') sortIcon.textContent = '↑';
                 else if (this.usernameSortOrder === 'desc') sortIcon.textContent = '↓';
@@ -1475,11 +1731,11 @@ console.log(JSON.parse(decrypted));
             }
 
             listEl.innerHTML = '';
-            
+
             let entries = this.vaultData.entries.filter(e => {
-                const matchQuery = (e.title || '').toLowerCase().includes(query) || 
-                                   (e.username || '').toLowerCase().includes(query) ||
-                                   (e.url || '').toLowerCase().includes(query);
+                const matchQuery = (e.title || '').toLowerCase().includes(query) ||
+                    (e.username || '').toLowerCase().includes(query) ||
+                    (e.url || '').toLowerCase().includes(query);
                 const matchCat = catId ? e.categoryId === catId : true;
                 return matchQuery && matchCat;
             });
@@ -1497,7 +1753,7 @@ console.log(JSON.parse(decrypted));
             entries.forEach((entry, index) => {
                 const tr = document.createElement('tr');
                 const catName = this.vaultData.categories.find(c => c.id === entry.categoryId)?.name || this.i18n.uncategorized || 'Uncategorized';
-                
+
                 const createCopyBtn = (text, title) => {
                     if (!text) return '';
                     return `<button class="b3-button b3-button--text b3-button--small pm-copy-btn" data-text="${text}" title="${this.i18n.copy || 'Copy'} ${title}">
@@ -1543,7 +1799,7 @@ console.log(JSON.parse(decrypted));
                         </div>
                     </td>
                 `;
-                
+
                 // Add toggle secret event listeners
                 tr.querySelectorAll('.pm-toggle-secret-btn').forEach(btn => {
                     btn.addEventListener('click', (e) => {
@@ -1551,7 +1807,7 @@ console.log(JSON.parse(decrypted));
                         const span = btn.previousElementSibling;
                         const iconUse = btn.querySelector('use');
                         const isHidden = span.textContent === '********';
-                        
+
                         if (isHidden) {
                             span.textContent = span.getAttribute('data-secret') || '';
                             iconUse.setAttribute('xlink:href', '#iconEye');
@@ -1572,7 +1828,7 @@ console.log(JSON.parse(decrypted));
                         });
                     });
                 });
-                
+
                 tr.querySelector('.pm-edit').addEventListener('click', (e) => {
                     e.stopPropagation();
                     this.showEntryDialog(entry);
@@ -1598,10 +1854,10 @@ console.log(JSON.parse(decrypted));
         renderTextsList(query, catId) {
             const listEl = this.tabElement.querySelector('#pm-texts-list');
             listEl.innerHTML = '';
-            
+
             let texts = (this.vaultData.encryptedTexts || []).filter(e => {
-                const matchQuery = (e.title || '').toLowerCase().includes(query) || 
-                                   (e.encryptedTextContent || e.text || '').toLowerCase().includes(query);
+                const matchQuery = (e.title || '').toLowerCase().includes(query) ||
+                    (e.encryptedTextContent || e.text || '').toLowerCase().includes(query);
                 const matchCat = catId ? e.categoryId === catId : true;
                 return matchQuery && matchCat;
             });
@@ -1609,7 +1865,7 @@ console.log(JSON.parse(decrypted));
             texts.forEach((entry, index) => {
                 const tr = document.createElement('tr');
                 const catName = this.vaultData.categories.find(c => c.id === entry.categoryId)?.name || this.i18n.uncategorized || 'Uncategorized';
-                
+
                 const createCopyBtn = (text, title) => {
                     if (!text) return '';
                     return `<button class="b3-button b3-button--text b3-button--small pm-copy-btn" data-text="${text}" title="${this.i18n.copy || 'Copy'} ${title}">
@@ -1641,7 +1897,7 @@ console.log(JSON.parse(decrypted));
                         </div>
                     </td>
                 `;
-                
+
                 // Add toggle secret event listeners
                 tr.querySelectorAll('.pm-toggle-secret-btn').forEach(btn => {
                     btn.addEventListener('click', (e) => {
@@ -1649,7 +1905,7 @@ console.log(JSON.parse(decrypted));
                         const span = btn.previousElementSibling;
                         const iconUse = btn.querySelector('use');
                         const isHidden = span.textContent === '********';
-                        
+
                         if (isHidden) {
                             span.textContent = span.getAttribute('data-secret') || '';
                             iconUse.setAttribute('xlink:href', '#iconEye');
@@ -1669,7 +1925,7 @@ console.log(JSON.parse(decrypted));
                         });
                     });
                 });
-                
+
                 tr.querySelector('.pm-edit').addEventListener('click', (e) => {
                     e.stopPropagation();
                     this.showTextDialog(entry);
@@ -1694,14 +1950,14 @@ console.log(JSON.parse(decrypted));
 
         showEntryDialog(entry = null) {
             const isEdit = !!entry;
-            const categoryOptions = this.vaultData.categories.map(c => 
+            const categoryOptions = this.vaultData.categories.map(c =>
                 `<option value="${c.id}" ${entry?.categoryId === c.id ? 'selected' : ''}>${c.name}</option>`
             ).join('');
 
             const formatDate = (ts) => {
                 if (!ts) return '-';
                 const d = new Date(ts);
-                return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+                return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
             };
 
             const dialog = new siyuan.Dialog({
@@ -1746,7 +2002,7 @@ console.log(JSON.parse(decrypted));
                 const pwdInput = dialog.element.querySelector('#pm-entry-password');
                 pwdInput.value = pwd;
                 pwdInput.type = 'text'; // show generated password temporarily
-                
+
                 const iconUse = dialog.element.querySelector('.pm-dialog-toggle-pwd use');
                 if (iconUse) iconUse.setAttribute('xlink:href', '#iconEye');
             });
@@ -1812,14 +2068,14 @@ console.log(JSON.parse(decrypted));
 
         showTextDialog(entry = null) {
             const isEdit = !!entry;
-            const categoryOptions = this.vaultData.categories.map(c => 
+            const categoryOptions = this.vaultData.categories.map(c =>
                 `<option value="${c.id}" ${entry?.categoryId === c.id ? 'selected' : ''}>${c.name}</option>`
             ).join('');
 
             const formatDate = (ts) => {
                 if (!ts) return '-';
                 const d = new Date(ts);
-                return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+                return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
             };
 
             const dialog = new siyuan.Dialog({
@@ -1899,9 +2155,9 @@ console.log(JSON.parse(decrypted));
             try {
                 this.isExporting = true;
                 const exportData = {
-                    entries: this.vaultData.entries.map(e => ({...e})),
-                    categories: this.vaultData.categories.map(c => ({...c})),
-                    encryptedTexts: (this.vaultData.encryptedTexts || []).map(e => ({...e}))
+                    entries: this.vaultData.entries.map(e => ({ ...e })),
+                    categories: this.vaultData.categories.map(c => ({ ...c })),
+                    encryptedTexts: (this.vaultData.encryptedTexts || []).map(e => ({ ...e }))
                 };
                 const dataStr = JSON.stringify(exportData, null, 2);
                 const blob = new Blob([dataStr], { type: 'application/json' });
@@ -1915,10 +2171,10 @@ console.log(JSON.parse(decrypted));
                 document.body.removeChild(a);
                 URL.revokeObjectURL(url);
                 siyuan.showMessage(this.i18n.exportSuccess || 'Export successful');
-                
+
                 // We do NOT call this.renderList() here because it's not needed
                 // and might cause issues if UI state is weird during file picker
-                
+
                 // Increase timeout to 30 seconds to prevent lockVault from firing
                 // if the user takes a long time in the save file dialog
                 if (this.exportTimer) clearTimeout(this.exportTimer);
@@ -1936,7 +2192,7 @@ console.log(JSON.parse(decrypted));
             try {
                 this.isExporting = true;
                 let markdown = '# PassManager Export\n\n';
-                
+
                 markdown += '## Passwords\n\n';
                 for (const entry of this.vaultData.entries) {
                     const catName = this.vaultData.categories.find(c => c.id === entry.categoryId)?.name || 'Uncategorized';
@@ -1954,24 +2210,24 @@ console.log(JSON.parse(decrypted));
                     if (entry.notes) markdown += `- **Notes:** ${entry.notes}\n`;
                     markdown += '\n';
                 }
-                
+
                 if (this.vaultData.encryptedTexts && this.vaultData.encryptedTexts.length > 0) {
                     markdown += '## Encrypted Texts\n\n';
                     for (const entry of this.vaultData.encryptedTexts) {
                         const catName = this.vaultData.categories.find(c => c.id === entry.categoryId)?.name || 'Uncategorized';
                         markdown += `### [${catName}] ${entry.title || 'Untitled'}\n\n`;
-                        
+
                         let textDisplay = entry.encryptedTextContent || entry.text || '';
                         if (encrypt && textDisplay) {
                             const encRes = await this.crypto.encrypt(textDisplay);
                             textDisplay = `${encRes.iv}:${encRes.data}`;
                         }
-                        
+
                         markdown += `- **${this.i18n.encryptedTextContent || 'Encrypted Text Content'}:**\n\n\`\`\`text\n${textDisplay}\n\`\`\`\n\n`;
                         if (entry.notes) markdown += `- **Notes:** ${entry.notes}\n\n`;
                     }
                 }
-                
+
                 // Get or create PassManager notebook
                 let notebooks = [];
                 try {
@@ -1980,10 +2236,10 @@ console.log(JSON.parse(decrypted));
                 } catch (e) {
                     console.error('Failed to list notebooks', e);
                 }
-                
+
                 const nbName = this.i18n.passManagerNotebook || 'PassManager';
                 let targetNb = notebooks.find(n => n.name === nbName);
-                
+
                 if (!targetNb) {
                     try {
                         const createNbRes = await siyuan.fetchSyncPost('/api/notebook/createNotebook', {
@@ -1999,19 +2255,19 @@ console.log(JSON.parse(decrypted));
                         throw new Error('Failed to create PassManager notebook');
                     }
                 }
-                
+
                 const res = await siyuan.fetchSyncPost('/api/filetree/createDocWithMd', {
                     notebook: targetNb.id,
                     path: `/PassManager-Export-${Date.now()}`,
                     markdown: markdown
                 });
-                
+
                 if (res.code === 0) {
                     siyuan.showMessage(this.i18n.exportNoteSuccess || 'Successfully exported to note');
                 } else {
                     throw new Error(res.msg);
                 }
-                
+
                 if (this.exportTimer) clearTimeout(this.exportTimer);
                 this.exportTimer = setTimeout(() => {
                     this.isExporting = false;
@@ -2044,14 +2300,14 @@ console.log(JSON.parse(decrypted));
                 this.vaultData.categories.forEach(cat => {
                     const item = document.createElement('div');
                     item.className = 'pm-cat-item';
-                    
+
                     const isDefault = cat.id === 'default';
-                    
+
                     item.innerHTML = `
                         <span>${cat.name}</span>
                         ${!isDefault ? `<button class="b3-button b3-button--text b3-button--error pm-cat-del-btn" data-id="${cat.id}">🗑️</button>` : ''}
                     `;
-                    
+
                     if (!isDefault) {
                         item.querySelector('.pm-cat-del-btn').addEventListener('click', async () => {
                             // Check if category is in use
@@ -2071,7 +2327,7 @@ console.log(JSON.parse(decrypted));
                             }
                         });
                     }
-                    
+
                     listEl.appendChild(item);
                 });
             };
@@ -2091,7 +2347,7 @@ console.log(JSON.parse(decrypted));
                 await this.saveVault();
                 input.value = '';
                 renderCatList();
-                
+
                 // Refresh main tab if it's open
                 if (this.tabElement) {
                     this.renderTabContent();
