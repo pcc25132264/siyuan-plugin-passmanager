@@ -781,6 +781,29 @@ console.log(JSON.parse(decrypted));
             });
 
             this.setting.addItem({
+                title: this.i18n.scanAllDocumentsTitle || 'Scan All Documents',
+                description: this.i18n.scanAllDocumentsDesc || 'Traverse all notebooks and rebuild the encrypted-block index. Only needed when the index is empty or out of date.',
+                createActionElement: () => {
+                    const btn = document.createElement('button');
+                    btn.className = 'b3-button b3-button--outline';
+                    btn.textContent = this.i18n.scanAllDocuments || 'Scan';
+                    btn.addEventListener('click', async () => {
+                        btn.disabled = true;
+                        try {
+                            const ids = await this.buildCryptoIndex();
+                            const label = (this.i18n.scanAllDone || 'Scanned') + ': ' + ids.length + ' ' + (this.i18n.cryptoBlockCount || 'encrypted blocks') + (this.i18n.scanAllDoneSuffix || '');
+                            siyuan.showMessage(label);
+                        } catch (e) {
+                            console.error(e);
+                            siyuan.showMessage('Scan failed', 3000, 'error');
+                        }
+                        btn.disabled = false;
+                    });
+                    return btn;
+                }
+            });
+
+            this.setting.addItem({
                 title: this.i18n.changePassword || 'Change Master Password',
                 description: this.i18n.changePasswordDesc || 'Re-encrypt the vault and set a new master password',
                 createActionElement: () => {
@@ -1076,24 +1099,57 @@ console.log(JSON.parse(decrypted));
             await this.saveCryptoBlockIndex(list.map(b => b.id));
         }
 
+        // 遍历全库所有文档，重建加密块 ID 索引（返回加密块 ID 列表）
+        async buildCryptoIndex() {
+            const walks = await this.collectCryptoBlocksByWalking();
+            const ids = walks.map(b => b.id);
+            await this.saveCryptoBlockIndex(ids);
+            return ids;
+        }
+
+        // 按块 ID 读取单个加密块的密文信息；若该块已不是加密块或不存在则返回 null
+        async getCryptoBlockById(id) {
+            try {
+                const kr = await siyuan.fetchSyncPost('/api/block/getBlockKramdown', { id });
+                if (kr.code !== 0 || !kr.data || !kr.data.kramdown) return null;
+                const found = [];
+                this.extractCryptoBlocks(kr.data.kramdown, found);
+                return found.find(b => b.id === id) || null;
+            } catch (e) {
+                return null;
+            }
+        }
+
         // 改密时收集所有加密块并用旧密钥（testCrypto）解密。
+        // 优先使用持久化索引中的块 ID；仅当索引为空时才遍历全库兜底一次。
         // 返回 { list: [{id, obj}], failedCount }，failedCount>0 时调用方应中止改密。
         async gatherCryptoBlocksForChange(testCrypto) {
-            let list = [];
+            let ids = await this.loadCryptoBlockIndex();
+            if (ids.length === 0) {
+                // 索引为空：遍历全库兜底重建一次
+                ids = await this.buildCryptoIndex();
+            }
+
+            const list = [];
             let failedCount = 0;
-            try {
-                const found = await this.collectCryptoBlocksByIndex();
-                for (const blk of found) {
-                    try {
-                        const decrypted = await testCrypto.decrypt(blk.data, blk.iv);
-                        list.push({ id: blk.id, obj: decrypted });
-                    } catch (e) {
-                        failedCount++;
-                        console.error('旧密钥无法解密加密块，跳过:', blk.id, e);
-                    }
+            const invalidIds = []; // 惰性清理：已被删除或已非加密的块 ID
+            for (const id of ids) {
+                const info = await this.getCryptoBlockById(id);
+                if (!info) {
+                    invalidIds.push(id); // 块已删除或已非加密，改密时从索引剔除
+                    continue;
                 }
-            } catch (e) {
-                console.error('收集加密块失败', e);
+                try {
+                    const decrypted = await testCrypto.decrypt(info.data, info.iv);
+                    list.push({ id, obj: decrypted });
+                } catch (e) {
+                    failedCount++;
+                    console.error('旧密钥无法解密加密块，跳过:', id, e);
+                }
+            }
+            // 惰性清理：一次性剔除校验失败的脏 ID，保证索引与实际一致
+            if (invalidIds.length > 0) {
+                await this.saveCryptoBlockIndex(ids.filter(x => !invalidIds.includes(x)));
             }
             return { list, failedCount };
         }
@@ -1215,12 +1271,20 @@ console.log(JSON.parse(decrypted));
                 width: '400px'
             });
 
-            // 打开时统计当前加密块数量
+            // 打开时统计加密块数量：优先用索引，索引为空才遍历一次
             const countLabel = dialog.element.querySelector('#pm-crypto-count');
             if (countLabel) {
-                this.collectCryptoBlocksByIndex().then(list => {
-                    countLabel.textContent = (list || []).length;
-                }).catch(() => { countLabel.textContent = '0'; });
+                (async () => {
+                    try {
+                        let ids = await this.loadCryptoBlockIndex();
+                        if (ids.length === 0) {
+                            ids = await this.buildCryptoIndex();
+                        }
+                        countLabel.textContent = ids.length;
+                    } catch (e) {
+                        countLabel.textContent = '0';
+                    }
+                })();
             }
 
             dialog.element.querySelector('#pm-change-pwd-btn').addEventListener('click', async () => {

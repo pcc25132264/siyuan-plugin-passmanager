@@ -103,26 +103,42 @@ test('collectCryptoBlocksByWalking 通过文档树遍历收集 crypto 块', asyn
     assert.ok(blocks.every((b) => b.id && b.iv && b.data));
 });
 
-test('gatherCryptoBlocksForChange: 全部可解密 -> list 完整、failed=0', async () => {
+test('gatherCryptoBlocksForChange: 有索引时只用索引块 ID，不遍历全库', async () => {
     const p = makePlugin();
-    p.collectCryptoBlocksByIndex = async () => [
-        { id: 'b1', data: 'd', iv: 'i' },
-        { id: 'b2', data: 'd', iv: 'i' },
-    ];
+    await p.saveCryptoBlockIndex(['b1', 'b2']);
+    let walked = false;
+    p.collectCryptoBlocksByWalking = async () => { walked = true; return []; };
+    p.getCryptoBlockById = async (id) => ({ id, data: 'd', iv: 'i' });
     const okCrypto = { decrypt: async (data, iv) => ({ content: 'plain-' + iv }) };
     const { list, failedCount } = await p.gatherCryptoBlocksForChange(okCrypto);
     assert.strictEqual(failedCount, 0);
     assert.strictEqual(list.length, 2);
     assert.deepStrictEqual(list.map((b) => b.id), ['b1', 'b2']);
     assert.strictEqual(list[0].obj.content, 'plain-i');
+    assert.strictEqual(walked, false, '索引非空时不应遍历全库读文档');
+});
+
+test('gatherCryptoBlocksForChange: 索引为空时才遍历一次做兜底', async () => {
+    const p = makePlugin();
+    let walked = 0;
+    p.loadCryptoBlockIndex = async () => []; // 索引为空
+    p.collectCryptoBlocksByWalking = async () => [
+        { id: 'w1', data: 'd', iv: 'i' },
+        { id: 'w2', data: 'd', iv: 'i' },
+    ];
+    p.saveCryptoBlockIndex = async (ids) => { walked++; this._ids = ids; };
+    p.getCryptoBlockById = async (id) => ({ id, data: 'd', iv: 'i' });
+    const okCrypto = { decrypt: async (data, iv) => ({ content: 'plain-' + iv }) };
+    const { list, failedCount } = await p.gatherCryptoBlocksForChange(okCrypto);
+    assert.strictEqual(failedCount, 0);
+    assert.deepStrictEqual(list.map((b) => b.id), ['w1', 'w2']);
+    assert.strictEqual(walked, 1, '索引为空时应且仅遍历一次');
 });
 
 test('gatherCryptoBlocksForChange: 存在解不开的块 -> failedCount>0（改密将被中止）', async () => {
     const p = makePlugin();
-    p.collectCryptoBlocksByIndex = async () => [
-        { id: 'b1', data: 'd', iv: 'i' },
-        { id: 'b2', data: 'd', iv: 'i' },
-    ];
+    await p.saveCryptoBlockIndex(['b1', 'b2']);
+    p.getCryptoBlockById = async (id) => ({ id, data: 'd', iv: 'i' });
     class FlakyCrypto {
         constructor() { this.failCount = 0; }
         async decrypt(data, iv) {
@@ -137,15 +153,46 @@ test('gatherCryptoBlocksForChange: 存在解不开的块 -> failedCount>0（改�
 
 test('gatherCryptoBlocksForChange: 全部解不开 -> list 为空、failedCount=N（防止只换盐导致全库损坏）', async () => {
     const p = makePlugin();
-    p.collectCryptoBlocksByIndex = async () => [
-        { id: 'b1', data: 'd', iv: 'i' },
-        { id: 'b2', data: 'd', iv: 'i' },
-        { id: 'b3', data: 'd', iv: 'i' },
-    ];
+    await p.saveCryptoBlockIndex(['b1', 'b2', 'b3']);
+    p.getCryptoBlockById = async (id) => ({ id, data: 'd', iv: 'i' });
     const badCrypto = { decrypt: async () => { throw new Error('bad'); } };
     const { list, failedCount } = await p.gatherCryptoBlocksForChange(badCrypto);
     assert.strictEqual(failedCount, 3);
     assert.strictEqual(list.length, 0);
+});
+
+test('getCryptoBlockById: 从单块 kramdown 中提取加密块，非加密/缺失返回 null', async () => {
+    const p = makePlugin();
+    fakeSiyuan.fetchSyncPost = async (path, payload) => {
+        if (path === '/api/block/getBlockKramdown' && payload.id === '20260324152103-lbokog9') {
+            return { code: 0, data: { id: '20260324152103-lbokog9', kramdown: sampleKramdown } }; // 含 20260324152103-lbokog9
+        }
+        return { code: 0, data: {} }; // 其他 id 无 kramdown -> null
+    };
+    // 索引里的 id 应对应到 kramdown 内实际的 crypto 块
+    const hit = await p.getCryptoBlockById('20260324152103-lbokog9');
+    assert.ok(hit, '应能读取该加密块');
+    assert.strictEqual(hit.id, '20260324152103-lbokog9');
+    // 请求一个不存在的 id -> null
+    const miss = await p.getCryptoBlockById('missing-id');
+    assert.strictEqual(miss, null, '不存在的块应返回 null');
+});
+
+test('gatherCryptoBlocksForChange: 惰性清理失效块 ID（已删除/已非加密）', async () => {
+    const p = makePlugin();
+    await p.saveCryptoBlockIndex(['alive1', 'alive2', 'gone1', 'gone2']); // gone* 是脏 ID
+    p.getCryptoBlockById = async (id) => {
+        if (id === 'gone1' || id === 'gone2') return null; // 已删除/已非加密
+        return { id, data: 'd', iv: 'i' };
+    };
+    const okCrypto = { decrypt: async (data, iv) => ({ content: 'plain-' + iv }) };
+    const { list, failedCount } = await p.gatherCryptoBlocksForChange(okCrypto);
+    assert.strictEqual(failedCount, 0);
+    assert.deepStrictEqual(list.map((b) => b.id), ['alive1', 'alive2']);
+    // 脏 ID 应从索引中被移除
+    const remaining = await p.loadCryptoBlockIndex();
+    assert.deepStrictEqual(remaining, ['alive1', 'alive2']);
+    assert.ok(remaining.length < 4, '索引应被清理');
 });
 
 test('collectCryptoBlocksByIndex: 索引缺失的块通过 getBlockKramdown 兜底', async () => {
