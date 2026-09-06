@@ -466,7 +466,48 @@
                 savedPasswordEnc: null
             };
             this.currentTab = 'passwords'; // 'passwords' or 'texts'
+            this.lang = 'zh_CN'; // 默认中文，可通过界面切换
+            this.LANG_FILE = 'vault-lang.json';
             this.cryptoBlockManager = new CryptoBlockManager(this);
+        }
+
+        // 初始化语言：默认中文，可被本地偏好覆盖
+        async initLang() {
+            try {
+                const saved = await this.loadData(this.LANG_FILE);
+                if (saved && saved.lang) {
+                    this.lang = saved.lang === 'en_US' ? 'en_US' : 'zh_CN';
+                }
+            } catch (e) {
+                console.error('Failed to load language preference', e);
+            }
+            await this.applyLang(this.lang, false);
+        }
+
+        // 应用指定语言：覆盖 this.i18n；persist 为 true 时保存用户偏好
+        async applyLang(lang, persist = true) {
+            this.lang = lang === 'en_US' ? 'en_US' : 'zh_CN';
+            const file = this.lang === 'en_US' ? 'en_US' : 'zh_CN';
+            try {
+                const url = `${window.siyuan.origin}/plugins/${this.name}/i18n/${file}.json`;
+                const res = await fetch(url);
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data) {
+                        this.i18n = Object.assign({}, this.i18n, data);
+                    }
+                }
+            } catch (e) {
+                console.error('Failed to load i18n file', e);
+            }
+            if (persist) {
+                try {
+                    await this.saveData(this.LANG_FILE, { lang: this.lang });
+                } catch (e) {
+                    console.error('Failed to save language preference', e);
+                }
+            }
+            return this.i18n;
         }
 
         // 获取（或生成）设备密钥，用于解密本地保存的主密码
@@ -522,6 +563,8 @@
         async onload() {
             const os = window?.siyuan?.config?.system?.os;
             this.isMobile = os === 'ios' || os === 'android' || !!document.getElementById('sidebar');
+
+            await this.initLang();
 
             this.protyleSlash = [{
                 filter: ["encrypt block", "加密块", "jiamikuai", "crypto"],
@@ -1657,7 +1700,8 @@ console.log(JSON.parse(decrypted));
             const isSetup = !this.salt;
             this.tabElement.innerHTML = `
                 <div class="passmanager-tab-container" style="display: flex; justify-content: center; align-items: center; height: 100%; width: 100%; background: var(--b3-theme-background);">
-                    <div style="width: min(400px, calc(100% - 24px)); padding: 24px; border: 1px solid var(--b3-theme-surface-lighter); border-radius: 8px; background: var(--b3-theme-surface);">
+                    <div style="position: relative; width: min(400px, calc(100% - 24px)); padding: 24px; border: 1px solid var(--b3-theme-surface-lighter); border-radius: 8px; background: var(--b3-theme-surface);">
+                        <button class="b3-button b3-button--text pm-lang-btn" id="pm-lang-btn" style="position: absolute; top: 12px; right: 12px;" title="${this.i18n.switchLanguage || '通用语言切换'}">${this.lang === 'en_US' ? '中文' : 'EN'}</button>
                         <h3 style="margin-top: 0; text-align: center;">${isSetup ? this.i18n.setupMasterPassword : this.i18n.unlockTitle}</h3>
                         <div class="passmanager-dialog-form" style="margin-top: 16px;">
                             <input type="password" class="passmanager-input b3-text-field" id="pm-master-pwd" placeholder="${this.i18n.masterPassword}">
@@ -1783,6 +1827,15 @@ console.log(JSON.parse(decrypted));
                     btn.click();
                 }
             });
+
+            // 语言切换
+            const langBtn = this.tabElement.querySelector('#pm-lang-btn');
+            if (langBtn) {
+                langBtn.addEventListener('click', async () => {
+                    await this.applyLang(this.lang === 'en_US' ? 'zh_CN' : 'en_US');
+                    this.renderTabContent();
+                });
+            }
         }
 
         renderMainUI() {
@@ -1800,6 +1853,10 @@ console.log(JSON.parse(decrypted));
                             <button class="b3-button b3-button--outline pm-tab-btn" data-tab="texts">
                                 <span class="pm-tab-icon"><svg style="width:1em;height:1em"><use xlink:href="#iconMarkdown"></use></svg></span>
                                 <span class="pm-tab-text">${this.i18n.encryptedTextsTab || 'Encrypted Texts'}</span>
+                            </button>
+                            <button class="b3-button b3-button--outline pm-lang-btn" id="pm-lang-btn" title="${this.i18n.switchLanguage || '通用语言切换'}">
+                                <span class="pm-tab-icon"><svg style="width:1em;height:1em"><use xlink:href="#iconLanguage"></use></svg></span>
+                                <span class="pm-tab-text">${this.lang === 'en_US' ? '中文' : 'EN'}</span>
                             </button>
                         </div>
                         <div class="pm-header-field pm-header-field-select">
@@ -1885,6 +1942,15 @@ console.log(JSON.parse(decrypted));
             // Set initial tab state
             if (this.currentTab === 'texts') {
                 this.tabElement.querySelector('[data-tab="texts"]').click();
+            }
+
+            // 语言切换
+            const langBtn = this.tabElement.querySelector('#pm-lang-btn');
+            if (langBtn) {
+                langBtn.addEventListener('click', async () => {
+                    await this.applyLang(this.lang === 'en_US' ? 'zh_CN' : 'en_US');
+                    this.renderTabContent();
+                });
             }
 
             const searchInput = this.tabElement.querySelector('#pm-search');

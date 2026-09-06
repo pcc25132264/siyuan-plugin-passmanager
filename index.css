@@ -39,6 +39,13 @@
     line-height: 1;
 }
 
+.pm-lang-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-right: 0;
+}
+
 .pm-header-field {
     display: inline-flex;
     align-items: center;

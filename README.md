@@ -4,6 +4,11 @@ A professional-grade password manager plugin for Siyuan Note, featuring industry
 
 > **Disclaimer**: This plugin is provided "as is" without any warranties. The developers and contributors are **not responsible** for any data loss, security breaches, or damages arising from the use of this plugin. Users are solely responsible for maintaining backups of their data and ensuring the security of their master passwords. Use at your own risk.
 
+## What's New in v1.1.0
+
+- Added in-app language switcher: a "中文 / EN" toggle appears in the vault and unlock screens, applies instantly and remembers your choice.
+- The plugin now defaults to Chinese UI and no longer depends on the system language.
+
 ## What's New in v1.0.2
 
 - Fixed encrypted code block display after reopening notes: plaintext/ciphertext overlap no longer appears.
