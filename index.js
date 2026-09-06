@@ -323,13 +323,21 @@
                         </div>`;
                     } else {
                         const parsed = JSON.parse(rawText);
-                        const decrypted = await this.plugin.crypto.decrypt(parsed.data, parsed.iv);
+                        // 内容为空（iv/data 为空字符串）时按空内容展示，避免 decrypt 报"解密失败"
+                        let decrypted;
+                        if (!parsed || !parsed.data) {
+                            decrypted = { content: '' };
+                        } else {
+                            decrypted = await this.plugin.crypto.decrypt(parsed.data, parsed.iv);
+                        }
                         const safeDiv = document.createElement('div');
                         safeDiv.style.whiteSpace = 'pre-wrap';
                         safeDiv.style.wordBreak = 'break-word';
                         safeDiv.style.lineHeight = '1.6';
 
-                        let displayText = decrypted.content || decrypted;
+                        let displayText = (decrypted && typeof decrypted === 'object' && 'content' in decrypted)
+                            ? (decrypted.content || '')        // content 为空也取空串，避免拼成 [object Object]
+                            : (typeof decrypted === 'string' ? decrypted : '');
                         // Strip Siyuan Block IAL attributes like {: id="xxx" updated="xxx"}
                         displayText = displayText.replace(/(?:\n\s*)?\{:[^}]+\}\s*$/, '');
 
@@ -385,8 +393,14 @@
             if (rawText) {
                 try {
                     const parsed = JSON.parse(rawText);
-                    const decrypted = await this.plugin.crypto.decrypt(parsed.data, parsed.iv);
-                    currentText = decrypted.content || decrypted;
+                    if (!parsed || !parsed.data) {
+                        currentText = ''; // 内容为空，直接按空编辑
+                    } else {
+                        const decrypted = await this.plugin.crypto.decrypt(parsed.data, parsed.iv);
+                        currentText = (decrypted && typeof decrypted === 'object' && 'content' in decrypted)
+                            ? (decrypted.content || '')
+                            : (typeof decrypted === 'string' ? decrypted : '');
+                    }
                     // Strip Siyuan Block IAL attributes for editing
                     currentText = currentText.replace(/(?:\n\s*)?\{:[^}]+\}\s*$/, '');
                 } catch (e) { }
@@ -887,8 +901,13 @@ console.log(JSON.parse(decrypted));
 
             try {
                 const parsed = JSON.parse(rawText);
-                const decrypted = await this.crypto.decrypt(parsed.data, parsed.iv);
-                const kramdown = decrypted.content || decrypted;
+                let kramdown = '';
+                if (parsed && parsed.data) {
+                    const decrypted = await this.crypto.decrypt(parsed.data, parsed.iv);
+                    kramdown = (decrypted && typeof decrypted === 'object' && 'content' in decrypted)
+                        ? (decrypted.content || '')
+                        : (typeof decrypted === 'string' ? decrypted : '');
+                }
 
                 await siyuan.fetchSyncPost('/api/block/updateBlock', {
                     dataType: "markdown",
@@ -1122,24 +1141,35 @@ console.log(JSON.parse(decrypted));
 
         // 改密时收集所有加密块并用旧密钥（testCrypto）解密。
         // 优先使用持久化索引中的块 ID；仅当索引为空时才遍历全库兜底一次。
-        // 返回 { list: [{id, obj}], raws: [{id, iv, data}], failedCount }
+        // 返回 { list: [{id, obj}], raws: [{id, iv, data}], failedCount, unreadableCount }
         //  - list：所有能解密成功的块（obj=明文）；raws：对应块的旧密文，用于失败回滚
-        //  - failedCount>0 时调用方应中止改密。
+        //  - failedCount>0 或 unreadableCount>0 时调用方应中止改密（任一存在都代表"有块无法确认/无法解密"，
+        //    继续提交新密钥/新盐会让它们变永久损坏）。
         async gatherCryptoBlocksForChange(testCrypto) {
-            let ids = await this.loadCryptoBlockIndex();
-            if (ids.length === 0) {
-                // 索引为空：遍历全库兜底重建一次
-                ids = await this.buildCryptoIndex();
+            // 改密必须保证不漏任何加密块：仅用索引可能漏掉未登记的历史块，
+            // 导致改密后这些块仍是旧密钥而 salt 已更新——解不开、即"改密后损坏"。
+            // 因此始终做一次全库遍历重建索引，并与现有索引并集去重；遍历失败才退化为仅用索引。
+            let indexed = await this.loadCryptoBlockIndex();
+            let ids = [...indexed];
+            try {
+                const walked = await this.buildCryptoIndex();
+                ids = [...new Set([...indexed, ...walked])];
+            } catch (e) {
+                console.warn('全库遍历解密块失败，退化为仅用索引:', e);
             }
 
             const list = [];
             const raws = []; // 旧的 {id, iv, data}，回滚用
             let failedCount = 0;
-            const invalidIds = []; // 惰性清理：已被删除或已非加密的块 ID
+            const unreadable = [];
             for (const id of ids) {
                 const info = await this.getCryptoBlockById(id);
                 if (!info) {
-                    invalidIds.push(id); // 块已删除或已非加密，改密时从索引剔除
+                    // 改密时无法确认该块是否仍是加密块（可能在未打开/读取失败的笔记本里，或读取异常）。
+                    // 绝不能在此假定"已删除"就把它从索引剔除并继续改密——那会让它保持旧密文、
+                    // 而盐已轮换/密钥已变，变成永久解不开。记入 unreadable，由调用方中止改密。
+                    unreadable.push(id);
+                    console.error('改密时无法读取加密块，将其标记为需中止:', id);
                     continue;
                 }
                 raws.push({ id: info.id, iv: info.iv, data: info.data });
@@ -1151,11 +1181,7 @@ console.log(JSON.parse(decrypted));
                     console.error('旧密钥无法解密加密块，跳过:', id, e);
                 }
             }
-            // 惰性清理：一次性剔除校验失败的脏 ID，保证索引与实际一致
-            if (invalidIds.length > 0) {
-                await this.saveCryptoBlockIndex(ids.filter(x => !invalidIds.includes(x)));
-            }
-            return { list, raws, failedCount };
+            return { list, raws, failedCount, unreadableCount: unreadable.length };
         }
 
         // ---------- 更新加密块时的全屏进度覆盖层，保证改密过程不可被打断 ----------
@@ -1249,20 +1275,22 @@ console.log(JSON.parse(decrypted));
             return result;
         }
 
-        // 从文档 kramdown 中提取 crypto 代码块及其块 ID
+        // 从文档 kramdown 中提取 crypto 代码块及其块 ID。
+        // 注意结构：真实加密块可能在其代码块内部(闭 fence 前)混入 HTML overlay 渲染面板，且内层还有一个
+        // 属于 overlay 的 IAL 属性行（见 {: id="<overlayId>"}）。若按"加密载荷之后最近的 IAL"取 id，会误取到
+        // 内层 overlay 的 id；必须匹配外层代码块、取其闭 fence 之后的 IAL 才是加密块自身的 id。
+        // 同时需先清除整段 kramdown 的零宽空格 \u200B，否则 fence/IAL 里插空格会导致匹配失败漏块。
         extractCryptoBlocks(kramdown, result) {
             if (!kramdown) return;
-            const fenceRe = /```crypto[^\n]*\n([\s\S]*?)```\s*\n\s*\{:\s*id="([^"]+)"/g;
-            let fm;
-            while ((fm = fenceRe.exec(kramdown)) !== null) {
-                const raw = (fm[1] || '').replace(/\u200B/g, '').trim();
-                if (!raw) continue;
-                try {
-                    const parsed = JSON.parse(raw);
-                    if (parsed && parsed.iv && parsed.data) {
-                        result.push({ id: fm[2], data: parsed.data, iv: parsed.iv });
-                    }
-                } catch (e) { }
+            const cleanKramdown = kramdown.replace(/\u200B/g, '');
+            // 匹配外层代码块：任意语言标记开头 + 内容（可含 HTML/内层 IAL）+ 闭 fence 后紧跟的块 IAL
+            const fenceRe = /```[^\n]*\n([\s\S]*?)```[ \t]*\n[ \t]*\{:\s*id="([^"]+)"/g;
+            let m;
+            while ((m = fenceRe.exec(cleanKramdown)) !== null) {
+                // 内容须含加密载荷：{"iv":"24位hex","data":"hex"} —— 加密块的唯一确凿特征
+                const payload = /"iv"\s*:\s*"([0-9a-fA-F]{24})"\s*,\s*"data"\s*:\s*"([0-9a-fA-F]+)"/.exec(m[1] || '');
+                if (!payload) continue;
+                result.push({ id: m[2], iv: payload[1], data: payload[2] });
             }
         }
 
@@ -1332,6 +1360,7 @@ console.log(JSON.parse(decrypted));
                     const gathered = await this.gatherCryptoBlocksForChange(testCrypto);
                     const cryptoBlocks = gathered.list;
                     const failedCount = gathered.failedCount;
+                    const unreadableCount = gathered.unreadableCount || 0;
 
                     // 只要存在无法用旧密码解开的加密块，就中止改密，避免"只换盐、块未重加密"导致全库损坏
                     if (failedCount > 0) {
@@ -1339,6 +1368,17 @@ console.log(JSON.parse(decrypted));
                         siyuan.showMessage(
                             (this.i18n.changePasswordAborted || '有') + failedCount +
                             (this.i18n.changePasswordAbortedSuffix || ' 个加密块无法用旧密码解密，已中止改密，请先处理损坏块。'),
+                            7000, 'error'
+                        );
+                        return;
+                    }
+
+                    // 存在"读不到/确认不了"的加密块同样中止：不能把无法确认的块丢下并继续轮换
+                    if (unreadableCount > 0) {
+                        okBtn.disabled = false;
+                        siyuan.showMessage(
+                            (this.i18n.changePasswordUnreadable || '有') + unreadableCount +
+                            (this.i18n.changePasswordUnreadableSuffix || ' 个加密块无法读取确认，已中止改密。请先打开相关笔记本/确认块可读取后重试。'),
                             7000, 'error'
                         );
                         return;
@@ -1355,7 +1395,9 @@ console.log(JSON.parse(decrypted));
                     const newCrypto = new CryptoManager();
                     let newSalt;
                     try {
-                        newSalt = await newCrypto.deriveKey(newPwd);
+                        // 复用当前盐而非重新生成：换盐本身没有安全收益（改密后 PBKDF2 已换密钥），
+                        // 却会让任何未被本次重加密的块因盐轮换而失效。复用盐把"因改密损坏"的可能降到最低。
+                        newSalt = await newCrypto.deriveKey(newPwd, this.salt);
                     } catch (e) {
                         this.dismissUpdateOverlay();
                         throw e;
@@ -1412,6 +1454,16 @@ console.log(JSON.parse(decrypted));
                                 data: markdown,
                                 id: blk.id
                             });
+                            // 写入后回读校验：用新密钥回读该块并解密，内容必须与原明文一致，
+                            // 否则说明写入未生效或出错——立即中止回滚，绝不留下"改了部分、坏块落盘"
+                            const verify = await this.getCryptoBlockById(blk.id);
+                            if (!verify || !verify.data) {
+                                throw new Error('写入后回读为空: ' + blk.id);
+                            }
+                            const back = await newCrypto.decrypt(verify.data, verify.iv);
+                            if (JSON.stringify(back) !== JSON.stringify(blk.obj)) {
+                                throw new Error('写入后回读内容不一致: ' + blk.id);
+                            }
                             writtenBlock.add(blk.id);
                             done++;
                         } catch (e) {

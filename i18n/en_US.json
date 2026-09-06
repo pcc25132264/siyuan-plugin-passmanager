@@ -77,6 +77,8 @@
   "updatingEncryptedBlocks": "Re-encrypting encrypted blocks, please wait...",
   "changePasswordAborted": "There are ",
   "changePasswordAbortedSuffix": " encrypted block(s) that cannot be decrypted with the old password. Password change aborted. Please handle the damaged blocks first.",
+  "changePasswordUnreadable": "",
+  "changePasswordUnreadableSuffix": " encrypted block(s) could not be read/confirmed. Password change aborted. Please open the related notebooks and ensure the blocks are readable, then retry.",
   "changePasswordBlockFail": "Password change failed and was rolled back to the previous state. Please try again.",
   "changingMasterPassword": "Changing Master Password",
   "stepEncryptVault": "Step 1/4: Encrypting vault data with the new password...",

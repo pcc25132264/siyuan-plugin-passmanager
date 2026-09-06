@@ -71,6 +71,8 @@
   "updatingEncryptedBlocks": "正在重新加密加密块，请勿关闭...",
   "changePasswordAborted": "有",
   "changePasswordAbortedSuffix": " 个加密块无法用旧密码解密，已中止改密，请先处理损坏块。",
+  "changePasswordUnreadable": "有",
+  "changePasswordUnreadableSuffix": " 个加密块无法读取确认，已中止改密。请先打开相关笔记本、确认这些块可读取后重试。",
   "changePasswordBlockFail": "改密失败，已回滚到改密前状态，请重试。",
   "changingMasterPassword": "正在修改主密码",
   "stepEncryptVault": "第1步/共4步：正在用新主密码加密库数据...",
