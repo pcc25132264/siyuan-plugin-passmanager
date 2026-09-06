@@ -1181,7 +1181,7 @@ console.log(JSON.parse(decrypted));
                     console.error('旧密钥无法解密加密块，跳过:', id, e);
                 }
             }
-            return { list, raws, failedCount, unreadableCount: unreadable.length };
+            return { list, raws, failedCount, unreadableCount: unreadable.length, total: ids.length };
         }
 
         // ---------- 更新加密块时的全屏进度覆盖层，保证改密过程不可被打断 ----------
@@ -1306,6 +1306,8 @@ console.log(JSON.parse(decrypted));
                         <input type="password" class="passmanager-input b3-text-field" id="pm-new-pwd-confirm" placeholder="${this.i18n.confirmNewPassword || 'Confirm New Password'}">
                         <input type="password" class="passmanager-input b3-text-field" id="pm-siyuan-pwd" placeholder="${this.i18n.siyuanLoginPassword || 'Siyuan Password'}" title="${this.i18n.recoveryInputDesc}">
                         <div style="font-size: 12px; color: var(--b3-theme-on-surface-light);">${this.i18n.recoveryInputDesc || 'Optional: Used to recover master password'}</div>
+                        <button class="b3-button fn__flex-center" id="pm-precheck-btn" style="margin-top: 12px; width: 100%;">${this.i18n.precheckBtn || '预检（不修改，仅检查旧密码能否解开所有加密块）'}</button>
+                        <div id="pm-precheck-result" style="font-size: 13px; color: var(--b3-theme-on-surface); margin-top: 8px; white-space: pre-wrap;"></div>
                         <div style="display: flex; justify-content: flex-end; margin-top: 16px;">
                             <button class="b3-button" id="pm-change-pwd-btn">${this.i18n.save || 'Save'}</button>
                         </div>
@@ -1329,6 +1331,35 @@ console.log(JSON.parse(decrypted));
                     }
                 })();
             }
+
+            // 预检：不改动任何数据，只检查旧密码能否解密所有加密块，并汇报可解/解不开/读不到数量
+            dialog.element.querySelector('#pm-precheck-btn').addEventListener('click', async () => {
+                const resultEl = dialog.element.querySelector('#pm-precheck-result');
+                const oldPwd = dialog.element.querySelector('#pm-old-pwd').value;
+                const btn = dialog.element.querySelector('#pm-precheck-btn');
+                if (!oldPwd) {
+                    resultEl.textContent = this.i18n.precheckNeedOldPwd || '请先输入旧密码';
+                    return;
+                }
+                btn.disabled = true;
+                btn.textContent = this.i18n.precheckRunning || '正在预检…';
+                resultEl.textContent = this.i18n.precheckRunning || '正在预检…';
+                try {
+                    const testCrypto = new CryptoManager();
+                    await testCrypto.deriveKey(oldPwd, this.salt);
+                    const gathered = await this.gatherCryptoBlocksForChange(testCrypto);
+                    resultEl.textContent =
+                        (this.i18n.precheckResult || '加密块总数:') + gathered.total +
+                        '\n' + (this.i18n.precheckOk || '可解密:') + (gathered.list ? gathered.list.length : 0) +
+                        '\n' + (this.i18n.precheckFail || '无法解开(会中止):') + (gathered.failedCount || 0) +
+                        '\n' + (this.i18n.precheckUnreadable || '无法读取确认(会中止):') + (gathered.unreadableCount || 0);
+                } catch (e) {
+                    resultEl.textContent = (this.i18n.precheckError || '预检失败: ') + (e && e.message ? e.message : e);
+                } finally {
+                    btn.disabled = false;
+                    btn.textContent = this.i18n.precheckBtn || '预检';
+                }
+            });
 
             dialog.element.querySelector('#pm-change-pwd-btn').addEventListener('click', async () => {
                 const oldPwd = dialog.element.querySelector('#pm-old-pwd').value;
