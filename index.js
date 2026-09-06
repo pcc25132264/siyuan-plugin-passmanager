@@ -305,7 +305,7 @@
             if (this.plugin.locked) {
                 overlay.innerHTML = `<div style="display: flex; align-items: center; gap: 8px; justify-content: center; color: var(--b3-theme-on-surface-light); padding: 8px 0;">
                     <svg style="width: 18px; height: 18px;"><use xlink:href="#iconLock"></use></svg>
-                    <span>${this.plugin.i18n.vaultLockedPlaceholder || '🔒 密码库已锁定。点击解锁以查看内容。'}</span>
+                    <span>${this.plugin.i18n.vaultLockedPlaceholder || '密码库已锁定。点击解锁以查看内容。'}</span>
                 </div>`;
                 overlay.addEventListener('click', () => {
                     this.plugin.openVault();
@@ -1794,31 +1794,31 @@ console.log(JSON.parse(decrypted));
                     <div class="passmanager-header">
                         <div class="passmanager-tabs">
                             <button class="b3-button pm-tab-btn" data-tab="passwords">
-                                <span class="pm-tab-icon">🔐</span>
+                                <span class="pm-tab-icon"><svg style="width:1em;height:1em"><use xlink:href="#iconLock"></use></svg></span>
                                 <span class="pm-tab-text">${this.i18n.passwordsTab || 'Passwords'}</span>
                             </button>
                             <button class="b3-button b3-button--outline pm-tab-btn" data-tab="texts">
-                                <span class="pm-tab-icon">📝</span>
+                                <span class="pm-tab-icon"><svg style="width:1em;height:1em"><use xlink:href="#iconMarkdown"></use></svg></span>
                                 <span class="pm-tab-text">${this.i18n.encryptedTextsTab || 'Encrypted Texts'}</span>
                             </button>
                         </div>
                         <div class="pm-header-field pm-header-field-select">
-                            <span class="pm-header-icon">📁</span>
+                            <span class="pm-header-icon"><svg style="width:1em;height:1em"><use xlink:href="#iconFolder"></use></svg></span>
                             <select id="pm-filter-category" class="passmanager-select b3-select">
                                 ${categoryOptions}
                             </select>
                         </div>
                         <div class="pm-header-field pm-header-field-search">
-                            <span class="pm-header-icon">🔎</span>
+                            <span class="pm-header-icon"><svg style="width:1em;height:1em"><use xlink:href="#iconSearch"></use></svg></span>
                             <input type="text" class="passmanager-search b3-text-field" id="pm-search" placeholder="${this.i18n.searchPlaceholder}">
                         </div>
                         <div class="passmanager-toolbar">
-                            ${this.isMobile ? '' : `<button class="passmanager-btn-secondary b3-button b3-button--outline pm-toolbar-btn pm-toolbar-tab" id="pm-export-json-btn"><span class="pm-toolbar-icon">📤</span><span class="pm-toolbar-text">${this.i18n.exportJson || 'Export JSON'}</span></button>`}
-                            <button class="passmanager-btn-secondary b3-button b3-button--outline pm-toolbar-btn pm-toolbar-tab" id="pm-export-note-unencrypted-btn"><span class="pm-toolbar-icon">📄</span><span class="pm-toolbar-text">${this.i18n.exportUnencryptedNote || 'Export Unencrypted Note'}</span></button>
-                            <button class="passmanager-btn-secondary b3-button b3-button--outline pm-toolbar-btn pm-toolbar-tab" id="pm-export-note-encrypted-btn"><span class="pm-toolbar-icon">🔒</span><span class="pm-toolbar-text">${this.i18n.exportEncryptedNote || 'Export Encrypted Note'}</span></button>
-                            <button class="passmanager-btn-secondary b3-button b3-button--outline pm-toolbar-btn pm-toolbar-tab" id="pm-cat-btn"><span class="pm-toolbar-icon">🗂</span><span class="pm-toolbar-text">${this.i18n.manageCategories || 'Manage Categories'}</span></button>
+                            ${this.isMobile ? '' : `<button class="passmanager-btn-secondary b3-button b3-button--outline pm-toolbar-btn pm-toolbar-tab" id="pm-export-json-btn"><span class="pm-toolbar-icon"><svg style="width:1em;height:1em"><use xlink:href="#iconExport"></use></svg></span><span class="pm-toolbar-text">${this.i18n.exportJson || 'Export JSON'}</span></button>`}
+                            <button class="passmanager-btn-secondary b3-button b3-button--outline pm-toolbar-btn pm-toolbar-tab" id="pm-export-note-unencrypted-btn"><span class="pm-toolbar-icon"><svg style="width:1em;height:1em"><use xlink:href="#iconFile"></use></svg></span><span class="pm-toolbar-text">${this.i18n.exportUnencryptedNote || 'Export Unencrypted Note'}</span></button>
+                            <button class="passmanager-btn-secondary b3-button b3-button--outline pm-toolbar-btn pm-toolbar-tab" id="pm-export-note-encrypted-btn"><span class="pm-toolbar-icon"><svg style="width:1em;height:1em"><use xlink:href="#iconLock"></use></svg></span><span class="pm-toolbar-text">${this.i18n.exportEncryptedNote || 'Export Encrypted Note'}</span></button>
+                            <button class="passmanager-btn-secondary b3-button b3-button--outline pm-toolbar-btn pm-toolbar-tab" id="pm-cat-btn"><span class="pm-toolbar-icon"><svg style="width:1em;height:1em"><use xlink:href="#iconList"></use></svg></span><span class="pm-toolbar-text">${this.i18n.manageCategories || 'Manage Categories'}</span></button>
                             <button class="passmanager-btn b3-button pm-toolbar-btn pm-toolbar-btn--primary pm-toolbar-tab" id="pm-add-btn"><span class="pm-toolbar-icon">＋</span><span class="pm-toolbar-text">${this.i18n.addEntry}</span></button>
-                            <button class="passmanager-btn-secondary b3-button b3-button--cancel pm-toolbar-btn pm-toolbar-tab" id="pm-lock-btn"><span class="pm-toolbar-icon">🔐</span><span class="pm-toolbar-text">${this.i18n.lock}</span></button>
+                            <button class="passmanager-btn-secondary b3-button b3-button--cancel pm-toolbar-btn pm-toolbar-tab" id="pm-lock-btn"><span class="pm-toolbar-icon"><svg style="width:1em;height:1em"><use xlink:href="#iconLock"></use></svg></span><span class="pm-toolbar-text">${this.i18n.lock}</span></button>
                         </div>
                     </div>
                     <div class="passmanager-list">
@@ -2539,7 +2539,7 @@ console.log(JSON.parse(decrypted));
 
                     item.innerHTML = `
                         <span>${cat.name}</span>
-                        ${!isDefault ? `<button class="b3-button b3-button--text b3-button--error pm-cat-del-btn" data-id="${cat.id}">🗑️</button>` : ''}
+                        ${!isDefault ? `<button class="b3-button b3-button--text b3-button--error pm-cat-del-btn" data-id="${cat.id}"><svg style="width:1em;height:1em"><use xlink:href="#iconTrashcan"></use></svg></button>` : ''}
                     `;
 
                     if (!isDefault) {

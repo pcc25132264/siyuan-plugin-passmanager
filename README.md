@@ -2,7 +2,7 @@
 
 A professional-grade password manager plugin for Siyuan Note, featuring industry-standard encryption, secure password generation, encrypted text management, and intelligent auto-lock mechanisms to protect your sensitive information.
 
-> **⚠️ Disclaimer**: This plugin is provided "as is" without any warranties. The developers and contributors are **not responsible** for any data loss, security breaches, or damages arising from the use of this plugin. Users are solely responsible for maintaining backups of their data and ensuring the security of their master passwords. Use at your own risk.
+> **Disclaimer**: This plugin is provided "as is" without any warranties. The developers and contributors are **not responsible** for any data loss, security breaches, or damages arising from the use of this plugin. Users are solely responsible for maintaining backups of their data and ensuring the security of their master passwords. Use at your own risk.
 
 ## What's New in v1.0.2
 

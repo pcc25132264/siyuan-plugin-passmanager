@@ -47,7 +47,7 @@
   "encryptThisBlock": "Encrypt This Block",
   "decryptThisBlock": "Decrypt This Block",
   "encryptedBlockPlaceholder": "This is an encrypted block. Click to edit...",
-  "vaultLockedPlaceholder": "🔒 Vault is locked. Click to unlock and view content.",
+  "vaultLockedPlaceholder": "Vault is locked. Click to unlock and view content.",
   "allCategories": "All Categories",
   "category": "Category",
   "actions": "Actions",
