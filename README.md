@@ -4,10 +4,14 @@ A professional-grade password manager plugin for Siyuan Note, featuring industry
 
 > **Disclaimer**: This plugin is provided "as is" without any warranties. The developers and contributors are **not responsible** for any data loss, security breaches, or damages arising from the use of this plugin. Users are solely responsible for maintaining backups of their data and ensuring the security of their master passwords. Use at your own risk.
 
-## What's New in v1.1.0
+## What's New in v1.0.4
 
-- Added in-app language switcher: a "中文 / EN" toggle appears in the vault and unlock screens, applies instantly and remembers your choice.
-- The plugin now defaults to Chinese UI and no longer depends on the system language.
+- Reworked the "Change Master Password" flow to re-encrypt each encrypted block by index, skipping already-fixed blocks for much faster password changes.
+- Password changes now use a backup-and-rollback pseudo-transaction: any failed step automatically restores the pre-change state, keeping your vault data safe.
+- Added a pre-check button before changing the password to confirm the old password can decrypt every encrypted block; it aborts with a clear message if any block is undecryptable or unreadable.
+- The change reuses the original vault salt, eliminating the root cause behind vaults becoming undecryptable after salt rotation.
+- Fixed orphaned encrypted blocks and data loss caused by blocks that could not be decrypted with the old password.
+- Replaced all emoji icons with Siyuan's built-in SVG icons for a cleaner, more consistent UI.
 
 ## What's New in v1.0.2
 
